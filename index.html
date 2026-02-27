@@ -4,69 +4,27 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Fretboard Jedi - Master the Neck</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script>
-      tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['Inter', 'sans-serif'],
-              mono: ['JetBrains Mono', 'monospace'],
-            },
-            colors: {
-              wood: {
-                light: '#d4a574',
-                dark: '#292524',
-              },
-              fret: {
-                light: '#a3a3a3',
-                dark: '#57534e',
-              }
-            }
-          }
-        }
-      }
-    </script>
-    <style>
-      /* Custom scrollbar for tab view */
-      .custom-scrollbar::-webkit-scrollbar {
-        height: 8px;
-        width: 8px;
-      }
-      .custom-scrollbar::-webkit-scrollbar-track {
-        background: rgba(0,0,0,0.1);
-      }
-      .custom-scrollbar::-webkit-scrollbar-thumb {
-        background: rgba(0,0,0,0.2);
-        border-radius: 4px;
-      }
-      .dark .custom-scrollbar::-webkit-scrollbar-track {
-        background: rgba(255,255,255,0.05);
-      }
-      .dark .custom-scrollbar::-webkit-scrollbar-thumb {
-        background: rgba(255,255,255,0.2);
-      }
-    </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@^19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
-    "html-to-image": "https://esm.sh/html-to-image@^1.11.13",
-    "clsx": "https://esm.sh/clsx@^2.1.1"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
-</head>
+    <meta
+      name="description"
+      content="Fretboard Jedi helps guitar players practice scales, chords, triads, and progression-based solo ideas."
+    />
+    <meta property="og:title" content="Fretboard Jedi" />
+    <meta
+      property="og:description"
+      content="Interactive guitar practice app for scales, chords, triads, and solo suggestions."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/logo3.png" />
+    <link rel="icon" type="image/png" href="/logo3.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+  </head>
   <body class="bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-100 transition-colors duration-300">
     <div id="root"></div>
-  <script type="module" src="/index.tsx"></script>
-</body>
+    <script type="module" src="/index.tsx"></script>
+  </body>
 </html>

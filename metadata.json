@@ -1,5 +1,5 @@
 {
-  "name": "Scale Shed",
-  "description": "Master the guitar neck with interactive scale visualization, CAGED positions, and tab generation.",
+  "name": "Fretboard Jedi",
+  "description": "Master the guitar neck with interactive scales, chords, triads, and progression-based solo suggestions.",
   "requestFramePermissions": []
 }

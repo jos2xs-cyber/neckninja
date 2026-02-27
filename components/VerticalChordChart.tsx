@@ -12,6 +12,7 @@ interface SelectedChord {
 interface VerticalChordChartProps {
   chords: SelectedChord[];
   triadsOnly: boolean;
+  activeChordId?: number | null;
   settings: {
     showNoteNames: boolean;
   };
@@ -110,12 +111,14 @@ const generateChordNotes = (root: NoteName, chordType: ChordType, triadsOnly: bo
 
 // Single vertical fretboard column
 const FretboardColumn: React.FC<{
+  chordId: number;
   root: NoteName;
   chordType: ChordType;
   triadsOnly: boolean;
   showNoteNames: boolean;
   totalChords: number;
-}> = ({ root, chordType, triadsOnly, showNoteNames, totalChords }) => {
+  isActive: boolean;
+}> = ({ chordId, root, chordType, triadsOnly, showNoteNames, totalChords, isActive }) => {
   const notes = useMemo(() => generateChordNotes(root, chordType, triadsOnly), [root, chordType, triadsOnly]);
 
   const maxFret = 17;
@@ -167,7 +170,13 @@ const FretboardColumn: React.FC<{
   };
 
   return (
-    <div className="flex flex-col items-center">
+    <div
+      className={clsx(
+        "flex flex-col items-center rounded-lg p-2 transition-colors",
+        isActive && "bg-violet-50 dark:bg-violet-900/20 ring-1 ring-violet-400 dark:ring-violet-500"
+      )}
+      data-chord-id={chordId}
+    >
       {/* Header */}
       <div className="mb-2 text-center">
         <span className="text-sm font-semibold text-slate-600 dark:text-slate-300">
@@ -311,6 +320,7 @@ const FretboardColumn: React.FC<{
 const VerticalChordChart: React.FC<VerticalChordChartProps> = ({
   chords,
   triadsOnly,
+  activeChordId = null,
   settings,
 }) => {
   return (
@@ -319,11 +329,13 @@ const VerticalChordChart: React.FC<VerticalChordChartProps> = ({
         {chords.map((chord) => (
           <FretboardColumn
             key={chord.id}
+            chordId={chord.id}
             root={chord.root}
             chordType={chord.chordType}
             triadsOnly={triadsOnly}
             showNoteNames={settings.showNoteNames}
             totalChords={chords.length}
+            isActive={activeChordId === chord.id}
           />
         ))}
       </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Sun, Moon, Info, ChevronDown, ChevronUp, Music, Layers, Triangle } from 'lucide-react';
+import { Sun, Moon, Info, ChevronDown, ChevronUp, Music, Layers, Triangle, Link2, Play, Pause, Timer } from 'lucide-react';
 import clsx from 'clsx';
 import Fretboard from './components/Fretboard';
 import TabGenerator from './components/TabGenerator';
@@ -25,6 +25,16 @@ interface ProgressionPreset {
   label: string;
   degrees: ProgressionDegree[];
 }
+
+type SavedChord = {
+  root: NoteName;
+  chordType: ChordType;
+};
+
+type ChordView = 'Chords' | 'Triads';
+
+// Easy rollback: set to false to restore standalone Triads tab behavior.
+const ENABLE_HYBRID_TRIADS = true;
 
 const MAJOR_SCALE_INTERVALS = [0, 2, 4, 5, 7, 9, 11] as const;
 const NATURAL_MINOR_INTERVALS = [0, 2, 3, 5, 7, 8, 10] as const;
@@ -65,9 +75,30 @@ const MINOR_CHORD_PROGRESSIONS: ProgressionPreset[] = [
   { id: 'one-seven-six-seven', label: 'i-VII-VI-VII', degrees: [{ degree: 1 }, { degree: 7 }, { degree: 6 }, { degree: 7 }] },
 ];
 
+const isNoteName = (value: string | null): value is NoteName => {
+  return !!value && NOTES.includes(value as NoteName);
+};
+
+const SCALE_VALUES = Object.values(ScaleType);
+const TRIAD_VALUES = Object.values(TriadQuality);
+const CHORD_TYPE_VALUES = Object.values(ChordType);
+
+const isScaleType = (value: string | null): value is ScaleType => {
+  return !!value && SCALE_VALUES.includes(value as ScaleType);
+};
+
+const isTriadQuality = (value: string | null): value is TriadQuality => {
+  return !!value && TRIAD_VALUES.includes(value as TriadQuality);
+};
+
+const isChordType = (value: string): value is ChordType => {
+  return CHORD_TYPE_VALUES.includes(value as ChordType);
+};
+
 export default function App() {
   // State
   const [mode, setMode] = useState<Mode>('Scale');
+  const [chordView, setChordView] = useState<ChordView>('Chords');
   const [root, setRoot] = useState<NoteName>('A');
   const [scaleType, setScaleType] = useState<ScaleType>(ScaleType.MINOR_PENTATONIC);
   const [selectedChords, setSelectedChords] = useState<SelectedChord[]>([
@@ -91,6 +122,17 @@ export default function App() {
   const [progressionKey, setProgressionKey] = useState<NoteName>('A');
   const [progressionMode, setProgressionMode] = useState<KeyMode>('Major');
   const [activeProgressionPresetId, setActiveProgressionPresetId] = useState<string | null>(null);
+  const [bpm, setBpm] = useState(90);
+  const [metronomeOn, setMetronomeOn] = useState(false);
+  const [practicePlaying, setPracticePlaying] = useState(false);
+  const [activePracticeChordIndex, setActivePracticeChordIndex] = useState<number | null>(null);
+  const [shareCopied, setShareCopied] = useState(false);
+
+  const hasLoadedFromUrlRef = React.useRef(false);
+  const audioContextRef = React.useRef<AudioContext | null>(null);
+  const metronomeTimerRef = React.useRef<number | null>(null);
+  const progressionTimerRef = React.useRef<number | null>(null);
+  const metronomeBeatRef = React.useRef(0);
 
   // Ref for Fretboard export
   const fretboardRef = React.useRef<HTMLDivElement>(null);
@@ -109,8 +151,121 @@ export default function App() {
   }, [settings.darkMode]);
 
   useEffect(() => {
-    setActiveProgressionPresetId(null);
-  }, [progressionMode]);
+    if (mode !== 'Chord') {
+      setPracticePlaying(false);
+    }
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode === 'Chord' && chordView === 'Triads') {
+      setPracticePlaying(false);
+    }
+  }, [mode, chordView]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const modeParam = params.get('mode');
+    const rootParam = params.get('root');
+    const scaleParam = params.get('scale');
+    const positionParam = params.get('position');
+    const progressionKeyParam = params.get('progressionKey');
+    const progressionModeParam = params.get('progressionMode');
+    const chordViewParam = params.get('chordView');
+    const presetParam = params.get('preset');
+    const bpmParam = params.get('bpm');
+    const triadParam = params.get('triad');
+    const triadsOnlyParam = params.get('triadsOnly');
+    const stringGroupParam = params.get('stringGroup');
+    const chordsParam = params.get('chords');
+
+    if (modeParam === 'Scale' || modeParam === 'Chord' || modeParam === 'Triads') {
+      if (ENABLE_HYBRID_TRIADS && modeParam === 'Triads') {
+        setMode('Chord');
+        setChordView('Triads');
+      } else {
+        setMode(modeParam);
+      }
+    }
+    if (chordViewParam === 'Chords' || chordViewParam === 'Triads') setChordView(chordViewParam);
+    if (isNoteName(rootParam)) setRoot(rootParam);
+    if (isScaleType(scaleParam)) setScaleType(scaleParam);
+    if (isTriadQuality(triadParam)) setTriadQuality(triadParam);
+    if (triadsOnlyParam === 'true' || triadsOnlyParam === 'false') setTriadsOnly(triadsOnlyParam === 'true');
+    if (stringGroupParam && ['All', '1-2-3', '2-3-4', '3-4-5', '4-5-6'].includes(stringGroupParam)) {
+      setStringGroup(stringGroupParam as StringGroup);
+    }
+
+    if (positionParam === 'Full Neck') {
+      setPosition('Full Neck');
+    } else if (positionParam) {
+      const numericPosition = Number(positionParam);
+      if ([1, 2, 3, 4, 5].includes(numericPosition)) setPosition(numericPosition as Position);
+    }
+
+    if (isNoteName(progressionKeyParam)) setProgressionKey(progressionKeyParam);
+    if (progressionModeParam === 'Major' || progressionModeParam === 'Minor') setProgressionMode(progressionModeParam);
+    if (presetParam) setActiveProgressionPresetId(presetParam);
+    if (bpmParam) {
+      const parsedBpm = Number(bpmParam);
+      if (!Number.isNaN(parsedBpm) && parsedBpm >= 50 && parsedBpm <= 200) setBpm(parsedBpm);
+    }
+
+    if (chordsParam) {
+      try {
+        const parsed = JSON.parse(chordsParam) as SavedChord[];
+        const parsedChords = parsed
+          .filter((ch): ch is SavedChord => isNoteName(ch.root) && isChordType(ch.chordType))
+          .slice(0, 4)
+          .map((ch, index) => ({ id: index + 1, root: ch.root, chordType: ch.chordType }));
+
+        if (parsedChords.length > 0) setSelectedChords(parsedChords);
+      } catch {
+        // Ignore malformed URL state
+      }
+    }
+
+    hasLoadedFromUrlRef.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedFromUrlRef.current) return;
+
+    const params = new URLSearchParams();
+    params.set('mode', mode);
+    params.set('root', root);
+    params.set('scale', scaleType);
+    params.set('position', String(position));
+    params.set('progressionKey', progressionKey);
+    params.set('progressionMode', progressionMode);
+    params.set('chordView', chordView);
+    params.set('triad', triadQuality);
+    params.set('triadsOnly', String(triadsOnly));
+    params.set('stringGroup', stringGroup);
+    params.set('bpm', String(bpm));
+
+    if (activeProgressionPresetId) params.set('preset', activeProgressionPresetId);
+    params.set(
+      'chords',
+      JSON.stringify(selectedChords.map(({ root: chordRoot, chordType }) => ({ root: chordRoot, chordType })))
+    );
+
+    const nextUrl = `${window.location.pathname}?${params.toString()}`;
+    window.history.replaceState(null, '', nextUrl);
+  }, [
+    mode,
+    root,
+    scaleType,
+    position,
+    progressionKey,
+    progressionMode,
+    chordView,
+    triadQuality,
+    triadsOnly,
+    stringGroup,
+    bpm,
+    activeProgressionPresetId,
+    selectedChords
+  ]);
 
   // Derived Data
   const triadDefinition = {
@@ -122,7 +277,12 @@ export default function App() {
     tip: "Practice finding triads on different string groups. The colors show interval function: Red=Root, Blue=3rd, Green=5th."
   };
   const activeChordType = selectedChords[0]?.chordType ?? ChordType.MAJOR;
-  const currentDefinition = mode === 'Scale' ? SCALES[scaleType] : mode === 'Chord' ? CHORDS[activeChordType] : triadDefinition;
+  const currentDefinition =
+    mode === 'Scale'
+      ? SCALES[scaleType]
+      : mode === 'Chord'
+        ? (chordView === 'Triads' ? triadDefinition : CHORDS[activeChordType])
+        : triadDefinition;
   const positionLabel = position === 'Full Neck' 
     ? 'All Positions' 
     : `${POSITION_NAMES[position]} (${position})`;
@@ -139,6 +299,89 @@ export default function App() {
       ),
     [progressionKey, selectedChords, progressionMode]
   );
+  const activePracticeChordId = activePracticeChordIndex !== null ? selectedChords[activePracticeChordIndex]?.id ?? null : null;
+
+  const getAudioContext = () => {
+    if (!audioContextRef.current) {
+      audioContextRef.current = new window.AudioContext();
+    }
+    return audioContextRef.current;
+  };
+
+  const playMetronomeClick = (accent: boolean) => {
+    try {
+      const audioContext = getAudioContext();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      const now = audioContext.currentTime;
+
+      oscillator.type = 'sine';
+      oscillator.frequency.value = accent ? 1200 : 880;
+      gainNode.gain.setValueAtTime(accent ? 0.08 : 0.05, now);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+
+      oscillator.start(now);
+      oscillator.stop(now + 0.08);
+    } catch {
+      // Audio may be blocked by browser settings until user interaction.
+    }
+  };
+
+  useEffect(() => {
+    if (!metronomeOn) {
+      if (metronomeTimerRef.current) window.clearInterval(metronomeTimerRef.current);
+      metronomeTimerRef.current = null;
+      metronomeBeatRef.current = 0;
+      return;
+    }
+
+    const msPerBeat = Math.max(120, Math.floor(60000 / bpm));
+    const useBarAccent = mode === 'Chord' && chordView === 'Chords';
+    metronomeTimerRef.current = window.setInterval(() => {
+      const accent = useBarAccent && metronomeBeatRef.current % 4 === 0;
+      playMetronomeClick(accent);
+      metronomeBeatRef.current += 1;
+    }, msPerBeat);
+
+    return () => {
+      if (metronomeTimerRef.current) window.clearInterval(metronomeTimerRef.current);
+      metronomeTimerRef.current = null;
+    };
+  }, [metronomeOn, bpm, mode, chordView]);
+
+  useEffect(() => {
+    if (!practicePlaying || selectedChords.length === 0) {
+      if (progressionTimerRef.current) window.clearInterval(progressionTimerRef.current);
+      progressionTimerRef.current = null;
+      setActivePracticeChordIndex(null);
+      return;
+    }
+
+    let step = 0;
+    setActivePracticeChordIndex(0);
+    const msPerChord = Math.max(500, Math.floor((60000 / bpm) * 4));
+
+    progressionTimerRef.current = window.setInterval(() => {
+      step = (step + 1) % selectedChords.length;
+      setActivePracticeChordIndex(step);
+    }, msPerChord);
+
+    return () => {
+      if (progressionTimerRef.current) window.clearInterval(progressionTimerRef.current);
+      progressionTimerRef.current = null;
+    };
+  }, [practicePlaying, selectedChords, bpm]);
+
+  useEffect(() => {
+    return () => {
+      if (metronomeTimerRef.current) window.clearInterval(metronomeTimerRef.current);
+      if (progressionTimerRef.current) window.clearInterval(progressionTimerRef.current);
+      audioContextRef.current?.close();
+    };
+  }, []);
 
   const updateChordSelection = (id: number, field: 'root' | 'chordType', value: NoteName | ChordType) => {
     setActiveProgressionPresetId(null);
@@ -180,6 +423,16 @@ export default function App() {
 
     setSelectedChords(nextChords);
     setActiveProgressionPresetId(preset.id);
+  };
+
+  const copyShareLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setShareCopied(true);
+      window.setTimeout(() => setShareCopied(false), 1800);
+    } catch {
+      setShareCopied(false);
+    }
   };
 
   return (
@@ -242,17 +495,19 @@ export default function App() {
                 >
                    <Layers size={16} /> Chords
                 </button>
-                <button
-                   onClick={() => setMode('Triads')}
-                   className={clsx(
-                       "flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-full text-sm font-bold transition-all duration-300",
-                       mode === 'Triads'
-                        ? "bg-white dark:bg-slate-700 text-violet-600 dark:text-violet-300 shadow-sm scale-100"
-                        : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-                   )}
-                >
-                   <Triangle size={16} /> Triads
-                </button>
+                {!ENABLE_HYBRID_TRIADS && (
+                  <button
+                     onClick={() => setMode('Triads')}
+                     className={clsx(
+                         "flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-full text-sm font-bold transition-all duration-300",
+                         mode === 'Triads'
+                          ? "bg-white dark:bg-slate-700 text-violet-600 dark:text-violet-300 shadow-sm scale-100"
+                          : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                     )}
+                  >
+                     <Triangle size={16} /> Triads
+                  </button>
+                )}
              </div>
           </div>
 
@@ -261,6 +516,25 @@ export default function App() {
             {/* Group 1: Definition Selection */}
             {mode === 'Chord' ? (
               <div className="flex-1 w-full space-y-3">
+                <div className="inline-flex bg-slate-100 dark:bg-slate-900 rounded-md p-0.5 w-fit">
+                  {(['Chords', 'Triads'] as const).map((view) => (
+                    <button
+                      key={view}
+                      onClick={() => setChordView(view)}
+                      className={clsx(
+                        "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
+                        chordView === view
+                          ? "bg-violet-500 text-white"
+                          : "text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                      )}
+                    >
+                      {view}
+                    </button>
+                  ))}
+                </div>
+
+                {chordView === 'Chords' ? (
+                <>
                 <div className="flex items-center justify-between">
                   <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     Chords (up to 4)
@@ -290,7 +564,10 @@ export default function App() {
                           {(['Major', 'Minor'] as const).map((keyMode) => (
                             <button
                               key={keyMode}
-                              onClick={() => setProgressionMode(keyMode)}
+                              onClick={() => {
+                                setProgressionMode(keyMode);
+                                setActiveProgressionPresetId(null);
+                              }}
                               className={clsx(
                                 "px-2.5 py-1 text-[11px] font-semibold rounded transition-colors",
                                 progressionMode === keyMode
@@ -333,9 +610,74 @@ export default function App() {
                       </div>
                     </div>
 
+                    <div className="bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg p-3 space-y-3">
+                      <div className="flex flex-wrap items-center gap-3 justify-between">
+                        <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                          Practice Tools
+                        </h4>
+                        <button
+                          onClick={copyShareLink}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-slate-300 dark:border-slate-600 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                          title="Copy shareable link"
+                        >
+                          <Link2 size={14} /> {shareCopied ? 'Copied' : 'Share Link'}
+                        </button>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-3">
+                        <label className="flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                          <Timer size={14} />
+                          BPM
+                        </label>
+                        <input
+                          type="range"
+                          min={50}
+                          max={200}
+                          value={bpm}
+                          onChange={(e) => setBpm(Number(e.target.value))}
+                          className="w-36"
+                        />
+                        <span className="text-sm font-bold text-slate-800 dark:text-slate-100 w-10 text-right">{bpm}</span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          onClick={() => setMetronomeOn((prev) => !prev)}
+                          className={clsx(
+                            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-semibold transition-colors",
+                            metronomeOn
+                              ? "border-emerald-500 bg-emerald-500 text-white"
+                              : "border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                          )}
+                        >
+                          {metronomeOn ? <Pause size={14} /> : <Play size={14} />}
+                          {metronomeOn ? 'Stop Metronome' : 'Start Metronome'}
+                        </button>
+
+                        <button
+                          onClick={() => setPracticePlaying((prev) => !prev)}
+                          className={clsx(
+                            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-semibold transition-colors",
+                            practicePlaying
+                              ? "border-violet-500 bg-violet-500 text-white"
+                              : "border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                          )}
+                        >
+                          {practicePlaying ? <Pause size={14} /> : <Play size={14} />}
+                          {practicePlaying ? 'Stop Progression' : 'Play Progression'}
+                        </button>
+                      </div>
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {selectedChords.map((chord, index) => (
-                        <div key={chord.id} className="bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg p-3 space-y-2">
+                        <div
+                          key={chord.id}
+                          className={clsx(
+                            "bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg p-3 space-y-2 transition-colors",
+                            activePracticeChordIndex === index && "ring-2 ring-violet-400 dark:ring-violet-500 bg-violet-50/70 dark:bg-violet-900/20"
+                          )}
+                        >
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
                               Chord {index + 1}
@@ -427,6 +769,54 @@ export default function App() {
                     </div>
                   </div>
                 </div>
+                </>
+                ) : (
+                  <div className="bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg p-3 space-y-3">
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <div className="flex-1 min-w-[120px]">
+                        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Root</label>
+                        <div className="relative">
+                          <select
+                            value={root}
+                            onChange={(e) => setRoot(e.target.value as NoteName)}
+                            className="w-full appearance-none bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg py-2 px-3 pr-8 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none text-sm font-medium"
+                          >
+                            {NOTES.map(note => <option key={note} value={note}>{note}</option>)}
+                          </select>
+                          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-[120px]">
+                        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Quality</label>
+                        <div className="relative">
+                          <select
+                            value={triadQuality}
+                            onChange={(e) => setTriadQuality(e.target.value as TriadQuality)}
+                            className="w-full appearance-none bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg py-2 px-3 pr-8 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none text-sm font-medium"
+                          >
+                            {Object.values(TriadQuality).map(tq => <option key={tq} value={tq}>{tq}</option>)}
+                          </select>
+                          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-[180px]">
+                        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">String Group</label>
+                        <div className="relative">
+                          <select
+                            value={stringGroup}
+                            onChange={(e) => setStringGroup(e.target.value as StringGroup)}
+                            className="w-full appearance-none bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg py-2 px-3 pr-8 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none text-sm font-medium"
+                          >
+                            {(['All', '1-2-3', '2-3-4', '3-4-5', '4-5-6'] as StringGroup[]).map(sg => (
+                              <option key={sg} value={sg}>{sg}</option>
+                            ))}
+                          </select>
+                          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="flex gap-4 flex-1">
@@ -561,7 +951,7 @@ export default function App() {
                 </button>
               )}
 
-              {mode === 'Chord' && (
+              {mode === 'Chord' && chordView === 'Chords' && (
                 <button
                   onClick={() => setTriadsOnly(prev => !prev)}
                   className={clsx(
@@ -574,7 +964,7 @@ export default function App() {
                 </button>
               )}
 
-              {mode === 'Triads' && (
+              {(mode === 'Triads' || (mode === 'Chord' && chordView === 'Triads')) && (
                 <button
                   onClick={() => setShowIntervalLabels(prev => !prev)}
                   className={clsx(
@@ -589,12 +979,48 @@ export default function App() {
             </div>
 
           </div>
+
+          {mode === 'Scale' && (
+            <div className="bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg p-3 space-y-3">
+              <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
+                Practice Tools
+              </h4>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                  <Timer size={14} />
+                  BPM
+                </label>
+                <input
+                  type="range"
+                  min={50}
+                  max={200}
+                  value={bpm}
+                  onChange={(e) => setBpm(Number(e.target.value))}
+                  className="w-40"
+                />
+                <span className="text-sm font-bold text-slate-800 dark:text-slate-100 w-10 text-right">{bpm}</span>
+                <button
+                  onClick={() => setMetronomeOn((prev) => !prev)}
+                  className={clsx(
+                    "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-semibold transition-colors",
+                    metronomeOn
+                      ? "border-emerald-500 bg-emerald-500 text-white"
+                      : "border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  )}
+                >
+                  {metronomeOn ? <Pause size={14} /> : <Play size={14} />}
+                  {metronomeOn ? 'Stop Metronome' : 'Start Metronome'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* FRETBOARD AREA */}
         <section className="relative">
            {/* Color Legend (Mobile Overlay or Top Strip) - only for Scale and Chord modes */}
-           {mode !== 'Triads' && (
+           {mode !== 'Triads' && !(mode === 'Chord' && chordView === 'Triads') && (
              <div className="flex gap-4 mb-2 overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
                 {[1,2,3,4,5].map(p => (
                     <div key={p} className="flex items-center gap-1.5 min-w-max">
@@ -615,11 +1041,22 @@ export default function App() {
                 onExportRef={setFretboardRef}
              />
            ) : mode === 'Chord' ? (
-             <VerticalChordChart
-               chords={selectedChords}
-               triadsOnly={triadsOnly}
-               settings={settings}
-             />
+             chordView === 'Triads' ? (
+               <TriadFretboard
+                 root={root}
+                 quality={triadQuality}
+                 showNoteNames={settings.showNoteNames}
+                 showIntervalLabels={showIntervalLabels}
+                 stringGroup={stringGroup}
+               />
+             ) : (
+               <VerticalChordChart
+                 chords={selectedChords}
+                 triadsOnly={triadsOnly}
+                 activeChordId={activePracticeChordId}
+                 settings={settings}
+               />
+             )
            ) : (
              <TriadFretboard
                root={root}
@@ -643,7 +1080,7 @@ export default function App() {
                  >
                    <h3 className="font-bold text-lg flex items-center gap-2 text-slate-800 dark:text-white">
                       <Info size={20} className="text-violet-500" />
-                      {mode} Info
+                      {(mode === 'Chord' && chordView === 'Triads') ? 'Triads' : mode} Info
                    </h3>
                    {isInfoExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                  </button>
