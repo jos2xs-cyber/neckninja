@@ -32,6 +32,8 @@ type SavedChord = {
 };
 
 type ChordView = 'Chords' | 'Triads';
+type ChordNoteDisplayMode = 'shape' | 'all';
+type ChordCagedScope = 'core' | 'full';
 
 // Easy rollback: set to false to restore standalone Triads tab behavior.
 const ENABLE_HYBRID_TRIADS = true;
@@ -106,7 +108,8 @@ export default function App() {
     { id: 2, root: 'A', chordType: ChordType.MAJOR },
     { id: 3, root: 'E', chordType: ChordType.MAJOR },
   ]);
-  const [triadsOnly, setTriadsOnly] = useState(false);
+  const [chordNoteDisplayMode, setChordNoteDisplayMode] = useState<ChordNoteDisplayMode>('shape');
+  const [chordCagedScope, setChordCagedScope] = useState<ChordCagedScope>('core');
   const [triadQuality, setTriadQuality] = useState<TriadQuality>(TriadQuality.MAJOR);
   const [showIntervalLabels, setShowIntervalLabels] = useState(true);
   const [stringGroup, setStringGroup] = useState<StringGroup>('All');
@@ -174,7 +177,8 @@ export default function App() {
     const presetParam = params.get('preset');
     const bpmParam = params.get('bpm');
     const triadParam = params.get('triad');
-    const triadsOnlyParam = params.get('triadsOnly');
+    const chordNoteModeParam = params.get('chordNoteMode');
+    const cagedScopeParam = params.get('cagedScope');
     const stringGroupParam = params.get('stringGroup');
     const chordsParam = params.get('chords');
 
@@ -190,7 +194,8 @@ export default function App() {
     if (isNoteName(rootParam)) setRoot(rootParam);
     if (isScaleType(scaleParam)) setScaleType(scaleParam);
     if (isTriadQuality(triadParam)) setTriadQuality(triadParam);
-    if (triadsOnlyParam === 'true' || triadsOnlyParam === 'false') setTriadsOnly(triadsOnlyParam === 'true');
+    if (chordNoteModeParam === 'shape' || chordNoteModeParam === 'all') setChordNoteDisplayMode(chordNoteModeParam);
+    if (cagedScopeParam === 'core' || cagedScopeParam === 'full') setChordCagedScope(cagedScopeParam);
     if (stringGroupParam && ['All', '1-2-3', '2-3-4', '3-4-5', '4-5-6'].includes(stringGroupParam)) {
       setStringGroup(stringGroupParam as StringGroup);
     }
@@ -239,7 +244,8 @@ export default function App() {
     params.set('progressionMode', progressionMode);
     params.set('chordView', chordView);
     params.set('triad', triadQuality);
-    params.set('triadsOnly', String(triadsOnly));
+    params.set('chordNoteMode', chordNoteDisplayMode);
+    params.set('cagedScope', chordCagedScope);
     params.set('stringGroup', stringGroup);
     params.set('bpm', String(bpm));
 
@@ -260,7 +266,8 @@ export default function App() {
     progressionMode,
     chordView,
     triadQuality,
-    triadsOnly,
+    chordNoteDisplayMode,
+    chordCagedScope,
     stringGroup,
     bpm,
     activeProgressionPresetId,
@@ -922,7 +929,7 @@ export default function App() {
                 )}
                 title="Toggle Note Names"
               >
-                <span className="font-bold text-xs">ABC</span>
+                <span className="font-bold text-xs">Notes</span>
               </button>
 
               {mode === 'Scale' && (
@@ -952,16 +959,61 @@ export default function App() {
               )}
 
               {mode === 'Chord' && chordView === 'Chords' && (
-                <button
-                  onClick={() => setTriadsOnly(prev => !prev)}
-                  className={clsx(
-                      "p-2.5 rounded-lg border transition-colors",
-                      triadsOnly ? "bg-violet-100 dark:bg-violet-900/30 border-violet-200 dark:border-violet-700 text-violet-700 dark:text-violet-300" : "bg-transparent border-slate-200 dark:border-slate-700 text-slate-400"
-                  )}
-                  title="Show Triads Only"
-                >
-                  <span className="font-bold text-xs">3</span>
-                </button>
+                <div className="flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                  <button
+                    onClick={() => setChordNoteDisplayMode('shape')}
+                    className={clsx(
+                      "px-2.5 py-2 text-[10px] font-bold uppercase tracking-wide transition-colors",
+                      chordNoteDisplayMode === 'shape'
+                        ? "bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300"
+                        : "bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    )}
+                    title="Shape-Specific (CAGED)"
+                  >
+                    SHAPE
+                  </button>
+                  <button
+                    onClick={() => setChordNoteDisplayMode('all')}
+                    className={clsx(
+                      "px-2.5 py-2 text-[10px] font-bold uppercase tracking-wide transition-colors border-l border-slate-200 dark:border-slate-700",
+                      chordNoteDisplayMode === 'all'
+                        ? "bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300"
+                        : "bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    )}
+                    title="All Chord Tones"
+                  >
+                    ALL TONES
+                  </button>
+                </div>
+              )}
+
+              {mode === 'Chord' && chordView === 'Chords' && (
+                <div className="flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                  <button
+                    onClick={() => setChordCagedScope('core')}
+                    className={clsx(
+                      "px-2.5 py-2 text-[10px] font-bold uppercase tracking-wide transition-colors",
+                      chordCagedScope === 'core'
+                        ? "bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300"
+                        : "bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    )}
+                    title="Core CAGED (AED only)"
+                  >
+                    CORE CAGED
+                  </button>
+                  <button
+                    onClick={() => setChordCagedScope('full')}
+                    className={clsx(
+                      "px-2.5 py-2 text-[10px] font-bold uppercase tracking-wide transition-colors border-l border-slate-200 dark:border-slate-700",
+                      chordCagedScope === 'full'
+                        ? "bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300"
+                        : "bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    )}
+                    title="Full CAGED"
+                  >
+                    FULL CAGED
+                  </button>
+                </div>
               )}
 
               {(mode === 'Triads' || (mode === 'Chord' && chordView === 'Triads')) && (
@@ -1052,7 +1104,8 @@ export default function App() {
              ) : (
                <VerticalChordChart
                  chords={selectedChords}
-                 triadsOnly={triadsOnly}
+                 noteDisplayMode={chordNoteDisplayMode}
+                 cagedScope={chordCagedScope}
                  activeChordId={activePracticeChordId}
                  settings={settings}
                />

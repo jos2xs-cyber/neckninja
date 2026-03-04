@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { NoteName, ChordType, Position } from '../types';
+import { NoteName, ChordType } from '../types';
 import { NOTES, CHORDS, POSITION_COLORS, POSITION_NAMES, STRING_TUNING_INDICES } from '../constants';
 import clsx from 'clsx';
 
@@ -11,7 +11,8 @@ interface SelectedChord {
 
 interface VerticalChordChartProps {
   chords: SelectedChord[];
-  triadsOnly: boolean;
+  noteDisplayMode: 'shape' | 'all';
+  cagedScope: 'core' | 'full';
   activeChordId?: number | null;
   settings: {
     showNoteNames: boolean;
@@ -57,19 +58,211 @@ interface ChordNote {
   positionIndex: number;
 }
 
-// Triad intervals: Root, Minor 3rd, Major 3rd, Perfect 5th
-const TRIAD_INTERVALS = [0, 3, 4, 7];
+interface ShapeRange {
+  pos: 1 | 2 | 3 | 4 | 5;
+  label: string;
+  minFret: number;
+  maxFret: number;
+  centerFret: number;
+  isOpenSupplement?: boolean;
+}
 
-const generateChordNotes = (root: NoteName, chordType: ChordType, triadsOnly: boolean = false): ChordNote[] => {
+const MINOR_FAMILY_CHORDS = new Set<ChordType>([
+  ChordType.MINOR,
+  ChordType.MINOR_7,
+  ChordType.MINOR_7_FLAT_5,
+  ChordType.DIMINISHED,
+]);
+
+const MAJOR_FAMILY_CHORDS = new Set<ChordType>([
+  ChordType.MAJOR,
+  ChordType.MAJOR_7,
+  ChordType.DOMINANT_7,
+]);
+
+const getRootFretOnString = (root: NoteName, openStringIndex: number): number => {
+  const rootIdx = NOTES.indexOf(root);
+  return (rootIdx - openStringIndex + 12) % 12;
+};
+
+const clampAndSortRanges = (raw: ShapeRange[], maxFret: number): ShapeRange[] => {
+  return raw
+    .map((range) => ({
+      ...range,
+      minFret: Math.max(0, range.minFret),
+      maxFret: Math.min(maxFret, range.maxFret),
+      centerFret: Math.max(0, Math.min(maxFret, range.centerFret)),
+    }))
+    .filter((range) => range.minFret <= range.maxFret)
+    .sort((a, b) => a.centerFret - b.centerFret);
+};
+
+const normalizeShapeRanges = (raw: ShapeRange[], maxFret: number): ShapeRange[] => {
+  const sortedRanges = clampAndSortRanges(raw, maxFret);
+
+  for (let i = 0; i < sortedRanges.length - 1; i++) {
+    const current = sortedRanges[i];
+    const next = sortedRanges[i + 1];
+    const boundary = Math.floor((current.centerFret + next.centerFret) / 2);
+    current.maxFret = Math.min(current.maxFret, boundary);
+    next.minFret = Math.max(next.minFret, boundary + 1);
+  }
+
+  return sortedRanges
+    .filter((range) => range.minFret <= range.maxFret)
+    .map((range) => ({
+      ...range,
+      centerFret: Math.floor((range.minFret + range.maxFret) / 2),
+    }));
+};
+
+const ensureOpenWindow = (ranges: ShapeRange[], openWindow: ShapeRange, maxFret: number): ShapeRange[] => {
+  const hasOpenCoverage = ranges.some((range) => range.minFret <= 0 && range.maxFret >= 0);
+  if (hasOpenCoverage) return ranges;
+  return normalizeShapeRanges([...ranges, { ...openWindow, isOpenSupplement: true }], maxFret);
+};
+
+const appendOctaveRepeats = (ranges: ShapeRange[], maxFret: number): ShapeRange[] => {
+  if (ranges.length === 0) return ranges;
+
+  const baseRanges = ranges.filter((range) => !range.isOpenSupplement);
+  const additions: ShapeRange[] = [];
+
+  for (const base of baseRanges) {
+    for (let shift = 12; base.minFret + shift <= maxFret; shift += 12) {
+      const repeated: ShapeRange = {
+        ...base,
+        minFret: base.minFret + shift,
+        maxFret: base.maxFret + shift,
+        centerFret: base.centerFret + shift,
+      };
+
+      const duplicateInOriginal = ranges.some(
+        (range) =>
+          range.label === repeated.label &&
+          range.minFret === repeated.minFret &&
+          range.maxFret === repeated.maxFret
+      );
+      const duplicateInAdditions = additions.some(
+        (range) =>
+          range.label === repeated.label &&
+          range.minFret === repeated.minFret &&
+          range.maxFret === repeated.maxFret
+      );
+      if (!duplicateInOriginal && !duplicateInAdditions) {
+        additions.push(repeated);
+      }
+    }
+  }
+
+  return normalizeShapeRanges([...ranges, ...additions], maxFret);
+};
+
+const getMinorShapeRanges = (root: NoteName, maxFret: number): ShapeRange[] => {
+  const aRoot = getRootFretOnString(root, 0); // A string
+  const eRoot = getRootFretOnString(root, 7); // low E string
+  const dRoot = getRootFretOnString(root, 5); // D string
+
+  const raw: ShapeRange[] = [
+    { pos: 1, label: 'A-Shape', minFret: aRoot, maxFret: aRoot + 3, centerFret: aRoot + 1 },
+    { pos: 5, label: 'E-Shape', minFret: eRoot, maxFret: eRoot + 3, centerFret: eRoot + 1 },
+    { pos: 4, label: 'D-Shape', minFret: dRoot + 1, maxFret: dRoot + 4, centerFret: dRoot + 2 },
+  ];
+
+  const withOpenWindow = ensureOpenWindow(
+    normalizeShapeRanges(raw, maxFret),
+    { pos: 5, label: 'E-Shape', minFret: 0, maxFret: 3, centerFret: 1 },
+    maxFret
+  );
+
+  return appendOctaveRepeats(withOpenWindow, maxFret);
+};
+
+const getMajorShapeRanges = (root: NoteName, maxFret: number): ShapeRange[] => {
+  const aRoot = getRootFretOnString(root, 0); // A string
+  const eRoot = getRootFretOnString(root, 7); // low E string
+  const dRoot = getRootFretOnString(root, 5); // D string
+
+  const raw: ShapeRange[] = [
+    { pos: 4, label: 'D/C Shape', minFret: dRoot + 2, maxFret: dRoot + 4, centerFret: dRoot + 3 },
+    { pos: 1, label: 'A/G Shape', minFret: aRoot, maxFret: aRoot + 3, centerFret: aRoot + 1 },
+    { pos: 5, label: 'E Shape', minFret: eRoot - 1, maxFret: eRoot + 2, centerFret: eRoot + 1 },
+  ];
+
+  const withOpenWindow = ensureOpenWindow(
+    normalizeShapeRanges(raw, maxFret),
+    { pos: 5, label: 'E Shape', minFret: 0, maxFret: 3, centerFret: 1 },
+    maxFret
+  );
+
+  return appendOctaveRepeats(withOpenWindow, maxFret);
+};
+
+const getDefaultShapeRanges = (root: NoteName, maxFret: number): ShapeRange[] => {
+  const p1Start = getPosition1StartFret(root);
+  const octaveShifts = [-12, 0, 12, 24];
+  const rawRanges = CAGED_OFFSETS.flatMap((offset) =>
+    octaveShifts.map((shift) => {
+      const minFret = p1Start + offset.minOffset + shift;
+      const maxFretForShape = p1Start + offset.maxOffset + shift;
+      return {
+        pos: offset.pos as 1 | 2 | 3 | 4 | 5,
+        label: POSITION_NAMES[offset.pos as 1 | 2 | 3 | 4 | 5],
+        minFret,
+        maxFret: maxFretForShape,
+        centerFret: Math.floor((minFret + maxFretForShape) / 2),
+      };
+    })
+  ).filter((range) => range.maxFret >= 0 && range.minFret <= maxFret);
+
+  return normalizeShapeRanges(rawRanges, maxFret);
+};
+
+const getShapeRanges = (
+  root: NoteName,
+  chordType: ChordType,
+  maxFret: number,
+  cagedScope: 'core' | 'full'
+): ShapeRange[] => {
+  if (cagedScope === 'full') {
+    return getDefaultShapeRanges(root, maxFret);
+  }
+  if (MAJOR_FAMILY_CHORDS.has(chordType)) {
+    return getMajorShapeRanges(root, maxFret);
+  }
+  if (MINOR_FAMILY_CHORDS.has(chordType)) {
+    return getMinorShapeRanges(root, maxFret);
+  }
+  return getDefaultShapeRanges(root, maxFret);
+};
+
+const getPositionIndexForFret = (fret: number, shapeRanges: ShapeRange[]): number => {
+  const match = shapeRanges.find((range) => fret >= range.minFret && fret <= range.maxFret);
+  return match?.pos ?? 0;
+};
+
+const getShapeRangeForFret = (fret: number, shapeRanges: ShapeRange[]): ShapeRange | undefined => {
+  return shapeRanges.find((range) => fret >= range.minFret && fret <= range.maxFret);
+};
+
+const isStringAllowedForShape = (stringIndex: number, shapeLabel: string): boolean => {
+  // stringIndex: 0=low E, 1=A, 2=D, 3=G, 4=B, 5=high E
+  if (shapeLabel === 'A/G Shape' || shapeLabel === 'A-Shape') return stringIndex >= 1;
+  if (shapeLabel === 'D/C Shape' || shapeLabel === 'D-Shape') return stringIndex >= 2;
+  return true; // E-shape and defaults
+};
+
+const generateChordNotes = (
+  root: NoteName,
+  chordType: ChordType,
+  noteDisplayMode: 'shape' | 'all' = 'shape',
+  cagedScope: 'core' | 'full' = 'core',
+  maxFret: number = 24
+): ChordNote[] => {
   const definition = CHORDS[chordType];
   const notes: ChordNote[] = [];
-  const p1Start = getPosition1StartFret(root);
-  const maxFret = 17;
-
-  // Filter to triad intervals only when enabled
-  const allowedIntervals = triadsOnly
-    ? definition.intervals.filter(i => TRIAD_INTERVALS.includes(i))
-    : definition.intervals;
+  const shapeRanges = getShapeRanges(root, chordType, maxFret, cagedScope);
+  const allowedIntervals = definition.intervals;
 
   for (let stringIdx = 0; stringIdx < 6; stringIdx++) {
     for (let fret = 0; fret <= maxFret; fret++) {
@@ -78,22 +271,10 @@ const generateChordNotes = (root: NoteName, chordType: ChordType, triadsOnly: bo
 
       if (!allowedIntervals.includes(interval)) continue;
 
-      // Determine position based on fret location
-      let posIndex = 0;
-      for (const offset of CAGED_OFFSETS) {
-        const minFret = p1Start + offset.minOffset;
-        const maxFret = p1Start + offset.maxOffset;
-
-        // Check base range, octave up, and octave down
-        if ((fret >= minFret && fret <= maxFret) ||
-            (fret >= minFret + 12 && fret <= maxFret + 12) ||
-            (fret >= minFret - 12 && fret <= maxFret - 12)) {
-          posIndex = offset.pos;
-          break;
-        }
-      }
-
-      if (posIndex === 0) posIndex = 1;
+      const shapeRange = getShapeRangeForFret(fret, shapeRanges);
+      if (!shapeRange) continue;
+      if (noteDisplayMode === 'shape' && !isStringAllowedForShape(stringIdx, shapeRange.label)) continue;
+      const posIndex = shapeRange.pos;
 
       notes.push({
         stringIndex: stringIdx,
@@ -114,14 +295,21 @@ const FretboardColumn: React.FC<{
   chordId: number;
   root: NoteName;
   chordType: ChordType;
-  triadsOnly: boolean;
+  noteDisplayMode: 'shape' | 'all';
+  cagedScope: 'core' | 'full';
   showNoteNames: boolean;
   totalChords: number;
   isActive: boolean;
-}> = ({ chordId, root, chordType, triadsOnly, showNoteNames, totalChords, isActive }) => {
-  const notes = useMemo(() => generateChordNotes(root, chordType, triadsOnly), [root, chordType, triadsOnly]);
-
-  const maxFret = 17;
+}> = ({ chordId, root, chordType, noteDisplayMode, cagedScope, showNoteNames, totalChords, isActive }) => {
+  const maxFret = 24;
+  const shapeRanges = useMemo(
+    () => getShapeRanges(root, chordType, maxFret, cagedScope),
+    [root, chordType, maxFret, cagedScope]
+  );
+  const notes = useMemo(
+    () => generateChordNotes(root, chordType, noteDisplayMode, cagedScope, maxFret),
+    [root, chordType, noteDisplayMode, cagedScope, maxFret]
+  );
   const fretHeight = 36;
   const stringSpacing = totalChords >= 4 ? 42 : totalChords === 3 ? 36 : 32;
   const nutHeight = 8;
@@ -130,22 +318,13 @@ const FretboardColumn: React.FC<{
   const leftRailWidth = labelWidth + fretNumberWidth;
   const fretboardWidth = stringSpacing * 5 + 40; // 6 strings
 
-  const p1Start = getPosition1StartFret(root);
-
   // Calculate shape label positions
-  const shapeLabels = CAGED_OFFSETS.map(offset => {
-    let centerFret = p1Start + Math.floor((offset.minOffset + offset.maxOffset) / 2);
-    // Handle octave wrapping
-    if (centerFret < 0) centerFret += 12;
-    if (centerFret > maxFret) centerFret -= 12;
-
-    return {
-      pos: offset.pos,
-      name: `${POSITION_NAMES[offset.pos as 1|2|3|4|5]}`,
-      fret: Math.max(1, Math.min(centerFret, maxFret - 1)),
-      color: POSITION_COLORS[offset.pos as 1|2|3|4|5],
-    };
-  }).filter(label => label.fret >= 0 && label.fret <= maxFret);
+  const shapeLabels = shapeRanges.map((range) => ({
+    pos: range.pos,
+    name: range.label,
+    fret: Math.max(1, Math.min(range.centerFret, maxFret - 1)),
+    color: POSITION_COLORS[range.pos],
+  }));
 
   // Get chord quality label
   const getChordLabel = () => {
@@ -187,9 +366,9 @@ const FretboardColumn: React.FC<{
       <div className="flex">
         {/* Shape Labels (left side) */}
         <div className="relative" style={{ width: leftRailWidth, height: (maxFret + 1) * fretHeight + nutHeight }}>
-          {shapeLabels.map((label) => (
+          {shapeLabels.map((label, idx) => (
             <div
-              key={`label-${label.pos}`}
+              key={`label-${label.pos}-${label.fret}-${idx}`}
               className="absolute flex items-center gap-1 text-xs whitespace-nowrap"
               style={{
                 top: nutHeight + label.fret * fretHeight - 8,
@@ -260,7 +439,7 @@ const FretboardColumn: React.FC<{
           ))}
 
           {/* Inlay dots */}
-          {[3, 5, 7, 9, 15].map(fret => (
+          {[3, 5, 7, 9, 15, 17, 19, 21].map(fret => (
             <div
               key={`inlay-${fret}`}
               className="absolute w-3 h-3 rounded-full bg-black/55"
@@ -270,7 +449,7 @@ const FretboardColumn: React.FC<{
               }}
             />
           ))}
-          {/* Double dot at 12 */}
+          {/* Double dots at 12 and 24 */}
           <div
             className="absolute w-3 h-3 rounded-full bg-black/55"
             style={{
@@ -282,6 +461,20 @@ const FretboardColumn: React.FC<{
             className="absolute w-3 h-3 rounded-full bg-black/55"
             style={{
               top: nutHeight + 12 * fretHeight - fretHeight / 2 - 6,
+              left: fretboardWidth / 2 + 8,
+            }}
+          />
+          <div
+            className="absolute w-3 h-3 rounded-full bg-black/55"
+            style={{
+              top: nutHeight + 24 * fretHeight - fretHeight / 2 - 6,
+              left: fretboardWidth / 2 - 20,
+            }}
+          />
+          <div
+            className="absolute w-3 h-3 rounded-full bg-black/55"
+            style={{
+              top: nutHeight + 24 * fretHeight - fretHeight / 2 - 6,
               left: fretboardWidth / 2 + 8,
             }}
           />
@@ -319,7 +512,8 @@ const FretboardColumn: React.FC<{
 
 const VerticalChordChart: React.FC<VerticalChordChartProps> = ({
   chords,
-  triadsOnly,
+  noteDisplayMode,
+  cagedScope,
   activeChordId = null,
   settings,
 }) => {
@@ -332,7 +526,8 @@ const VerticalChordChart: React.FC<VerticalChordChartProps> = ({
             chordId={chord.id}
             root={chord.root}
             chordType={chord.chordType}
-            triadsOnly={triadsOnly}
+            noteDisplayMode={noteDisplayMode}
+            cagedScope={cagedScope}
             showNoteNames={settings.showNoteNames}
             totalChords={chords.length}
             isActive={activeChordId === chord.id}
