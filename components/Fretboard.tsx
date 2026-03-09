@@ -11,10 +11,49 @@ interface FretboardProps {
   mode: Mode;
   position: Position;
   settings: Settings;
+  showAllNotes?: boolean;
+  allNotesZoom?: number;
+  activeStringFilter?: number | null;
+  onStringFilterChange?: (stringIndex: number | null) => void;
   onExportRef?: (ref: React.RefObject<HTMLDivElement>) => void;
 }
 
-const Fretboard: React.FC<FretboardProps> = ({ root, type, mode, position, settings, onExportRef }) => {
+const NOTE_COLORS: Record<string, string> = {
+  A: '#ef4444',
+  'A#': '#f97316',
+  B: '#eab308',
+  C: '#84cc16',
+  'C#': '#22c55e',
+  D: '#14b8a6',
+  'D#': '#06b6d4',
+  E: '#3b82f6',
+  F: '#6366f1',
+  'F#': '#8b5cf6',
+  G: '#d946ef',
+  'G#': '#ec4899',
+};
+
+const STRING_ORDINAL_LABELS = [
+  { stringIndex: 0, label: '6th' },
+  { stringIndex: 1, label: '5th' },
+  { stringIndex: 2, label: '4th' },
+  { stringIndex: 3, label: '3rd' },
+  { stringIndex: 4, label: '2nd' },
+  { stringIndex: 5, label: '1st' },
+];
+
+const Fretboard: React.FC<FretboardProps> = ({
+  root,
+  type,
+  mode,
+  position,
+  settings,
+  showAllNotes = false,
+  allNotesZoom = 1,
+  activeStringFilter = null,
+  onStringFilterChange,
+  onExportRef
+}) => {
   const fretboardRef = useRef<HTMLDivElement>(null);
   
   // Expose ref to parent if requested
@@ -23,12 +62,12 @@ const Fretboard: React.FC<FretboardProps> = ({ root, type, mode, position, setti
   }, [onExportRef]);
 
   const notes = useMemo(() => 
-    generateFretboard(root, type, position, mode), 
-    [root, type, position, mode]
+    generateFretboard(root, type, position, mode, showAllNotes), 
+    [root, type, position, mode, showAllNotes]
   );
 
   // Constants for rendering
-  const FRETS = 22;
+  const FRETS = 24;
   const STRINGS = 6;
   const FRETBOARD_HEIGHT = 320;
   const TOP_PADDING = 24;
@@ -41,10 +80,12 @@ const Fretboard: React.FC<FretboardProps> = ({ root, type, mode, position, setti
   };
   
   const getFretWidth = (i: number) => {
-      return 60 * Math.pow(0.985, i);
+      const zoom = showAllNotes ? allNotesZoom : 1;
+      return 60 * zoom * Math.pow(0.985, i);
   };
 
   const fretWidths = Array.from({ length: FRETS + 1 }, (_, i) => getFretWidth(i)); 
+  const stringLabelGutter = showAllNotes ? 64 : 0;
 
   const getFretPosition = (fretIndex: number) => {
       let pos = 0;
@@ -57,7 +98,7 @@ const Fretboard: React.FC<FretboardProps> = ({ root, type, mode, position, setti
   const totalWidth = getFretPosition(FRETS + 1);
 
   const renderConnections = () => {
-    if (position === 'Full Neck' || !settings.showConnections) return null;
+    if (showAllNotes || position === 'Full Neck' || !settings.showConnections) return null;
     
     const visibleNotes = notes.filter(n => n.opacity === 1);
     if (visibleNotes.length === 0) return null;
@@ -83,34 +124,38 @@ const Fretboard: React.FC<FretboardProps> = ({ root, type, mode, position, setti
 
   return (
     <div className="w-full overflow-x-auto custom-scrollbar bg-slate-100 dark:bg-slate-800 rounded-xl shadow-inner border border-slate-200 dark:border-slate-700 p-1">
-      <div
-        className="relative h-8 border-b border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40"
-        style={{ width: `${Math.max(totalWidth, 1000)}px` }}
-      >
-        {Array.from({ length: FRETS }).map((_, i) => {
-          const center = getFretPosition(i + 1) - (fretWidths[i] / 2);
-          return (
-            <div
-              key={`fret-strip-label-${i + 1}`}
-              className="absolute text-xs font-mono font-bold text-slate-700 dark:text-slate-100 bg-white dark:bg-slate-800 rounded px-1.5 py-0.5 border border-slate-300 dark:border-slate-600 z-20 select-none"
-              style={{ left: `${center - 11}px`, top: '4px' }}
-            >
-              {i + 1}
-            </div>
-          );
-        })}
-      </div>
+      <div style={{ paddingLeft: `${stringLabelGutter}px` }}>
+        <div
+          className="relative h-8 border-b border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40"
+          style={{ width: `${Math.max(totalWidth, 1000)}px` }}
+        >
+          {Array.from({ length: FRETS }).map((_, i) => {
+            const center = getFretPosition(i + 1) - (fretWidths[i] / 2);
+            return (
+              <div
+                key={`fret-strip-label-${i + 1}`}
+                className="absolute text-xs font-mono font-bold text-slate-700 dark:text-slate-100 bg-white dark:bg-slate-800 rounded px-1.5 py-0.5 border border-slate-300 dark:border-slate-600 z-20 select-none"
+                style={{ left: `${center - 11}px`, top: '4px' }}
+              >
+                {i + 1}
+              </div>
+            );
+          })}
+        </div>
 
-      <div 
-        ref={fretboardRef}
-        className="relative bg-white transition-colors duration-300 select-none overflow-hidden"
-        style={{ 
-            width: `${Math.max(totalWidth, 1000)}px`,
-            height: `${FRETBOARD_HEIGHT}px`,
-            backgroundImage: 'none',
-            backgroundSize: 'auto'
-        }}
-      >
+        <div 
+          ref={fretboardRef}
+          className={clsx(
+            "relative bg-white transition-colors duration-300 select-none",
+            showAllNotes ? "overflow-visible" : "overflow-hidden"
+          )}
+          style={{ 
+              width: `${Math.max(totalWidth, 1000)}px`,
+              height: `${FRETBOARD_HEIGHT}px`,
+              backgroundImage: 'none',
+              backgroundSize: 'auto'
+          }}
+        >
         {/* Nut */}
         <div className="absolute left-0 top-0 bottom-0 w-4 bg-[#e5e5e5] border-r-2 border-slate-400 z-10 shadow-xl"></div>
 
@@ -136,6 +181,10 @@ const Fretboard: React.FC<FretboardProps> = ({ root, type, mode, position, setti
                  style={{ left: `${getFretPosition(12) - (fretWidths[11] / 2) - 8}px` }} />
          <div className="absolute top-2/3 -translate-y-1/2 w-4 h-4 rounded-full bg-black/55" 
                  style={{ left: `${getFretPosition(12) - (fretWidths[11] / 2) - 8}px` }} />
+         <div className="absolute top-1/3 -translate-y-1/2 w-4 h-4 rounded-full bg-black/55" 
+                 style={{ left: `${getFretPosition(24) - (fretWidths[23] / 2) - 8}px` }} />
+         <div className="absolute top-2/3 -translate-y-1/2 w-4 h-4 rounded-full bg-black/55" 
+                 style={{ left: `${getFretPosition(24) - (fretWidths[23] / 2) - 8}px` }} />
 
 
         {/* Strings */}
@@ -151,16 +200,48 @@ const Fretboard: React.FC<FretboardProps> = ({ root, type, mode, position, setti
           />
         ))}
 
+        {showAllNotes && (
+          <div className="absolute left-0 top-0 bottom-0 z-50">
+            {STRING_ORDINAL_LABELS.map(({ stringIndex, label }) => {
+              const isActive = activeStringFilter === stringIndex;
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => onStringFilterChange?.(isActive ? null : stringIndex)}
+                  className={clsx(
+                    "absolute -translate-y-1/2 text-[11px] font-bold border rounded px-1 transition-colors",
+                    isActive
+                      ? "text-white bg-violet-600 border-violet-600"
+                      : "text-slate-700 dark:text-slate-200 bg-white/90 dark:bg-slate-900/85 border-slate-300 dark:border-slate-600 hover:bg-violet-50 dark:hover:bg-violet-900/25"
+                  )}
+                  style={{ left: '-58px', top: `${getStringTop(stringIndex)}px` }}
+                  title={`Show only ${label} string notes`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* Notes */}
         {notes.map((note, idx) => {
-            const fretCenter = note.fret === 0 
-                ? 8 
-                : getFretPosition(note.fret) - (fretWidths[note.fret-1] / 2);
+            if (showAllNotes && activeStringFilter !== null && note.stringIndex !== activeStringFilter) {
+              return null;
+            }
+            const openFretOffset = showAllNotes && note.fret === 0 ? -6 : 0;
+            const firstFretOffset = showAllNotes && note.fret === 1 ? 5 : 0;
+            const fretCenter = note.fret === 0
+                ? 8 + openFretOffset
+                : getFretPosition(note.fret) - (fretWidths[note.fret-1] / 2) + firstFretOffset;
             
             const stringTop = getStringTop(note.stringIndex); 
             
             const colorKey = position === 'Full Neck' ? note.positionIndex : position;
-            const baseColor = POSITION_COLORS[colorKey as 1|2|3|4|5] || POSITION_COLORS[1];
+            const baseColor = showAllNotes
+              ? NOTE_COLORS[note.note] ?? '#64748b'
+              : (POSITION_COLORS[colorKey as 1|2|3|4|5] || POSITION_COLORS[1]);
 
             if (note.opacity < 0.5) return null; 
 
@@ -169,8 +250,8 @@ const Fretboard: React.FC<FretboardProps> = ({ root, type, mode, position, setti
                     key={`note-${idx}`}
                     className={clsx(
                         "absolute w-7 h-7 -ml-3.5 -mt-3.5 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-lg transition-all duration-300 cursor-default group z-20",
-                        note.isRoot && "ring-2 ring-white w-8 h-8 -ml-4 -mt-4 z-30",
-                        note.isRoot && position !== 'Full Neck' && "animate-pulse-slow"
+                        note.isRoot && !showAllNotes && "ring-2 ring-white w-8 h-8 -ml-4 -mt-4 z-30",
+                        note.isRoot && position !== 'Full Neck' && !showAllNotes && "animate-pulse-slow"
                     )}
                     style={{
                         left: `${fretCenter}px`,
@@ -180,7 +261,7 @@ const Fretboard: React.FC<FretboardProps> = ({ root, type, mode, position, setti
                     }}
                 >
                     {settings.showNoteNames && <span>{note.note}</span>}
-                    {note.isRoot && <div className="absolute inset-0 rounded-full border-2 border-white opacity-50 animate-ping" />}
+                    {note.isRoot && !showAllNotes && <div className="absolute inset-0 rounded-full border-2 border-white opacity-50 animate-ping" />}
                     
                     <div className="absolute bottom-full mb-2 hidden group-hover:block bg-black/80 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap z-40">
                          {note.interval === 0 ? 'Root' : `Interval: ${note.interval}`}
@@ -191,6 +272,7 @@ const Fretboard: React.FC<FretboardProps> = ({ root, type, mode, position, setti
 
         {renderConnections()}
 
+        </div>
       </div>
     </div>
   );

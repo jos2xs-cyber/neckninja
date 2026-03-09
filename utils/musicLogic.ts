@@ -118,7 +118,8 @@ export const generateFretboard = (
   root: NoteName,
   type: ScaleType | ChordType,
   currentPosition: Position,
-  mode: Mode
+  mode: Mode,
+  showAllNotes = false
 ): FretboardNote[] => {
   // Select data source based on mode
   const definition = mode === 'Scale' ? SCALES[type as ScaleType] : CHORDS[type as ChordType];
@@ -156,11 +157,11 @@ export const generateFretboard = (
   };
 
   for (let stringIdx = 0; stringIdx < 6; stringIdx++) {
-    for (let fret = 0; fret <= 22; fret++) {
+    for (let fret = 0; fret <= 24; fret++) {
       const note = getNoteAtFret(stringIdx, fret);
       const interval = getIntervalFromRoot(root, note);
-      
-      const isCorrectNote = definition.intervals.includes(interval);
+
+      const isCorrectNote = showAllNotes ? true : definition.intervals.includes(interval);
       const isRoot = interval === 0;
 
       if (!isCorrectNote) continue;

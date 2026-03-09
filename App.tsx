@@ -32,6 +32,7 @@ type SavedChord = {
 };
 
 type ChordView = 'Chords' | 'Triads';
+type ScaleView = 'pattern' | 'allNotes';
 type ChordNoteDisplayMode = 'shape' | 'all';
 type ChordCagedScope = 'core' | 'full';
 
@@ -101,6 +102,7 @@ export default function App() {
   // State
   const [mode, setMode] = useState<Mode>('Scale');
   const [chordView, setChordView] = useState<ChordView>('Chords');
+  const [scaleView, setScaleView] = useState<ScaleView>('pattern');
   const [root, setRoot] = useState<NoteName>('A');
   const [scaleType, setScaleType] = useState<ScaleType>(ScaleType.MINOR_PENTATONIC);
   const [selectedChords, setSelectedChords] = useState<SelectedChord[]>([
@@ -114,6 +116,7 @@ export default function App() {
   const [showIntervalLabels, setShowIntervalLabels] = useState(true);
   const [stringGroup, setStringGroup] = useState<StringGroup>('All');
   const [position, setPosition] = useState<Position>(1);
+  const [allNotesZoom, setAllNotesZoom] = useState(1.35);
   const [settings, setSettings] = useState<Settings>({
     showNoteNames: true,
     showPositionLabels: true,
@@ -122,6 +125,7 @@ export default function App() {
   });
   const [isInfoExpanded, setIsInfoExpanded] = useState(true);
   const [showScaleDegreeHelper, setShowScaleDegreeHelper] = useState(true);
+  const [allNotesStringFilter, setAllNotesStringFilter] = useState<number | null>(null);
   const [progressionKey, setProgressionKey] = useState<NoteName>('A');
   const [progressionMode, setProgressionMode] = useState<KeyMode>('Major');
   const [activeProgressionPresetId, setActiveProgressionPresetId] = useState<string | null>(null);
@@ -160,6 +164,12 @@ export default function App() {
   }, [mode]);
 
   useEffect(() => {
+    if (!(mode === 'Scale' && scaleView === 'allNotes')) {
+      setAllNotesStringFilter(null);
+    }
+  }, [mode, scaleView]);
+
+  useEffect(() => {
     if (mode === 'Chord' && chordView === 'Triads') {
       setPracticePlaying(false);
     }
@@ -170,6 +180,8 @@ export default function App() {
     const modeParam = params.get('mode');
     const rootParam = params.get('root');
     const scaleParam = params.get('scale');
+    const scaleViewParam = params.get('scaleView');
+    const allNotesZoomParam = params.get('allNotesZoom');
     const positionParam = params.get('position');
     const progressionKeyParam = params.get('progressionKey');
     const progressionModeParam = params.get('progressionMode');
@@ -191,8 +203,15 @@ export default function App() {
       }
     }
     if (chordViewParam === 'Chords' || chordViewParam === 'Triads') setChordView(chordViewParam);
+    if (scaleViewParam === 'pattern' || scaleViewParam === 'allNotes') setScaleView(scaleViewParam);
     if (isNoteName(rootParam)) setRoot(rootParam);
     if (isScaleType(scaleParam)) setScaleType(scaleParam);
+    if (allNotesZoomParam) {
+      const parsedAllNotesZoom = Number(allNotesZoomParam);
+      if (!Number.isNaN(parsedAllNotesZoom)) {
+        setAllNotesZoom(Math.min(2.2, Math.max(1, parsedAllNotesZoom)));
+      }
+    }
     if (isTriadQuality(triadParam)) setTriadQuality(triadParam);
     if (chordNoteModeParam === 'shape' || chordNoteModeParam === 'all') setChordNoteDisplayMode(chordNoteModeParam);
     if (cagedScopeParam === 'core' || cagedScopeParam === 'full') setChordCagedScope(cagedScopeParam);
@@ -239,6 +258,8 @@ export default function App() {
     params.set('mode', mode);
     params.set('root', root);
     params.set('scale', scaleType);
+    params.set('scaleView', scaleView);
+    params.set('allNotesZoom', allNotesZoom.toFixed(2));
     params.set('position', String(position));
     params.set('progressionKey', progressionKey);
     params.set('progressionMode', progressionMode);
@@ -261,6 +282,8 @@ export default function App() {
     mode,
     root,
     scaleType,
+    scaleView,
+    allNotesZoom,
     position,
     progressionKey,
     progressionMode,
@@ -275,6 +298,12 @@ export default function App() {
   ]);
 
   // Derived Data
+  const chromaticDefinition = {
+    name: 'Chromatic Notes',
+    intervals: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+    description: 'Shows every note on the fretboard from open strings through the 24th fret.',
+    tip: 'Use this view to memorize note locations and octave shapes across all strings.'
+  };
   const triadDefinition = {
     name: `${triadQuality} Triad`,
     intervals: triadQuality === TriadQuality.MAJOR ? [0, 4, 7] : [0, 3, 7],
@@ -286,10 +315,12 @@ export default function App() {
   const activeChordType = selectedChords[0]?.chordType ?? ChordType.MAJOR;
   const currentDefinition =
     mode === 'Scale'
-      ? SCALES[scaleType]
+      ? (scaleView === 'allNotes' ? chromaticDefinition : SCALES[scaleType])
       : mode === 'Chord'
         ? (chordView === 'Triads' ? triadDefinition : CHORDS[activeChordType])
         : triadDefinition;
+  const isScaleAllNotesView = mode === 'Scale' && scaleView === 'allNotes';
+  const effectiveScalePosition: Position = isScaleAllNotesView ? 'Full Neck' : position;
   const positionLabel = position === 'Full Neck' 
     ? 'All Positions' 
     : `${POSITION_NAMES[position]} (${position})`;
@@ -828,6 +859,35 @@ export default function App() {
             ) : (
               <div className="flex gap-4 flex-1">
                 <div className="flex-1 min-w-[100px]">
+                  {mode === 'Scale' && (
+                    <>
+                      <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Available Views</label>
+                      <div className="inline-flex bg-slate-100 dark:bg-slate-900 rounded-md p-0.5 mb-3 w-fit">
+                        <button
+                          onClick={() => setScaleView('pattern')}
+                          className={clsx(
+                            "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
+                            scaleView === 'pattern'
+                              ? "bg-violet-500 text-white"
+                              : "text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                          )}
+                        >
+                          Scale Pattern
+                        </button>
+                        <button
+                          onClick={() => setScaleView('allNotes')}
+                          className={clsx(
+                            "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
+                            scaleView === 'allNotes'
+                              ? "bg-violet-500 text-white"
+                              : "text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                          )}
+                        >
+                          All Notes
+                        </button>
+                      </div>
+                    </>
+                  )}
                   <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Root</label>
                   <div className="relative">
                     <select
@@ -870,7 +930,7 @@ export default function App() {
             )}
 
             {/* Group 2: Position Selection (only for Scale mode) */}
-            {mode === 'Scale' && (
+            {mode === 'Scale' && scaleView === 'pattern' && (
               <div className="flex-1 w-full">
                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
                    Position <span className="text-violet-500 ml-2 font-normal normal-case">{positionLabel}</span>
@@ -891,6 +951,29 @@ export default function App() {
                      </button>
                    ))}
                  </div>
+              </div>
+            )}
+            {mode === 'Scale' && scaleView === 'allNotes' && (
+              <div className="flex-1 w-full">
+                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+                  Neck Width <span className="text-violet-500 ml-2 font-normal normal-case">{Math.round(allNotesZoom * 100)}%</span>
+                </label>
+                <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-900 p-1 rounded-lg w-fit">
+                  <button
+                    onClick={() => setAllNotesZoom((prev) => Math.max(1, Math.round((prev - 0.1) * 100) / 100))}
+                    className="px-3 py-2 rounded-md text-sm font-bold bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors"
+                    title="Decrease neck width"
+                  >
+                    -
+                  </button>
+                  <button
+                    onClick={() => setAllNotesZoom((prev) => Math.min(2.2, Math.round((prev + 0.1) * 100) / 100))}
+                    className="px-3 py-2 rounded-md text-sm font-bold bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors"
+                    title="Increase neck width"
+                  >
+                    +
+                  </button>
+                </div>
               </div>
             )}
 
@@ -932,7 +1015,7 @@ export default function App() {
                 <span className="font-bold text-xs">Notes</span>
               </button>
 
-              {mode === 'Scale' && (
+              {mode === 'Scale' && scaleView === 'pattern' && (
                 <button
                   onClick={() => setSettings(s => ({ ...s, showConnections: !s.showConnections }))}
                   className={clsx(
@@ -945,7 +1028,7 @@ export default function App() {
                 </button>
               )}
 
-              {mode === 'Scale' && (
+              {mode === 'Scale' && scaleView === 'pattern' && (
                 <button
                   onClick={() => setShowScaleDegreeHelper(prev => !prev)}
                   className={clsx(
@@ -1032,7 +1115,7 @@ export default function App() {
 
           </div>
 
-          {mode === 'Scale' && (
+          {mode === 'Scale' && scaleView === 'pattern' && (
             <div className="bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg p-3 space-y-3">
               <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
                 Practice Tools
@@ -1072,7 +1155,7 @@ export default function App() {
         {/* FRETBOARD AREA */}
         <section className="relative">
            {/* Color Legend (Mobile Overlay or Top Strip) - only for Scale and Chord modes */}
-           {mode !== 'Triads' && !(mode === 'Chord' && chordView === 'Triads') && (
+           {!isScaleAllNotesView && mode !== 'Triads' && !(mode === 'Chord' && chordView === 'Triads') && (
              <div className="flex gap-4 mb-2 overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
                 {[1,2,3,4,5].map(p => (
                     <div key={p} className="flex items-center gap-1.5 min-w-max">
@@ -1088,8 +1171,12 @@ export default function App() {
                 root={root}
                 type={scaleType}
                 mode={mode}
-                position={position}
+                position={effectiveScalePosition}
                 settings={settings}
+                showAllNotes={isScaleAllNotesView}
+                allNotesZoom={allNotesZoom}
+                activeStringFilter={allNotesStringFilter}
+                onStringFilterChange={setAllNotesStringFilter}
                 onExportRef={setFretboardRef}
              />
            ) : mode === 'Chord' ? (
@@ -1168,7 +1255,7 @@ export default function App() {
                  )}
               </div>
 
-              {mode === 'Scale' && showScaleDegreeHelper && (
+              {mode === 'Scale' && scaleView === 'pattern' && showScaleDegreeHelper && (
                 <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-5">
                   <h3 className="font-bold text-lg text-slate-800 dark:text-white">Chords for a Key</h3>
                   <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
@@ -1194,7 +1281,7 @@ export default function App() {
             </div>
 
             {/* Right: Tab Gen (only for Scale mode) */}
-            {mode === 'Scale' && (
+            {mode === 'Scale' && scaleView === 'pattern' && (
               <div>
                 <TabGenerator
                     root={root}
