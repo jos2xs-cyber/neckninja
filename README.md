@@ -5,9 +5,14 @@ Fretboard Jedi is a guitar practice web app for visualizing scales, chord shapes
 ## Features
 
 - **Scales mode**
-  - Explore scales across the neck or by CAGED position
-  - Toggle note labels (`ABC`) and connection overlays
-  - Generate tab output and export tab/fretboard images
+  - **Available Views**:
+    - `Scale Pattern`: Explore scales across the neck or by CAGED position
+    - `All Notes`: Chromatic note map across all strings up to the 24th fret
+  - In `All Notes` view:
+    - Click `6th` to `1st` string labels to isolate a single string
+    - Use `Neck Width` (`- / +`) to increase horizontal spacing for practice
+  - Toggle note labels (`ABC`) and connection overlays (`Scale Pattern` view)
+  - Generate tab output and export tab/fretboard images (`Scale Pattern` view)
 
 - **Chords mode**
   - Build up to 4 chords manually
@@ -29,6 +34,7 @@ Fretboard Jedi is a guitar practice web app for visualizing scales, chord shapes
 - **General**
   - Dark/light theme toggle
   - Responsive UI for desktop and mobile
+  - URL-based state persistence (mode/settings/chords restore when reopening the same URL)
 
 ## Run Locally
 
