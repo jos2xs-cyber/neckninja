@@ -138,8 +138,8 @@ const TriadFretboard: React.FC<TriadFretboardProps> = ({
   }, [allNotes, stringGroup]);
 
   const maxFret = 17;
-  const fretHeight = 44;      // Increased from 36
-  const stringSpacing = 36;   // Increased from 28
+  const fretHeight = 46;
+  const stringSpacing = 48;
   const nutHeight = 10;       // Increased from 8
   const labelWidth = 90;      // Increased from 80
   const fretboardWidth = stringSpacing * 5 + 50; // Wider fretboard

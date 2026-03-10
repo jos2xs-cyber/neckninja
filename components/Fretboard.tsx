@@ -243,13 +243,14 @@ const Fretboard: React.FC<FretboardProps> = ({
               ? NOTE_COLORS[note.note] ?? '#64748b'
               : (POSITION_COLORS[colorKey as 1|2|3|4|5] || POSITION_COLORS[1]);
 
-            if (note.opacity < 0.5) return null; 
+            if (note.opacity <= 0) return null;
 
             return (
                 <div
                     key={`note-${idx}`}
                     className={clsx(
-                        "absolute w-7 h-7 -ml-3.5 -mt-3.5 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-lg transition-all duration-300 cursor-default group z-20",
+                        "absolute w-7 h-7 -ml-3.5 -mt-3.5 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-lg transition-all duration-300 cursor-default z-20",
+                        !showAllNotes && "group",
                         note.isRoot && !showAllNotes && "ring-2 ring-white w-8 h-8 -ml-4 -mt-4 z-30",
                         note.isRoot && position !== 'Full Neck' && !showAllNotes && "animate-pulse-slow"
                     )}
@@ -263,9 +264,11 @@ const Fretboard: React.FC<FretboardProps> = ({
                     {settings.showNoteNames && <span>{note.note}</span>}
                     {note.isRoot && !showAllNotes && <div className="absolute inset-0 rounded-full border-2 border-white opacity-50 animate-ping" />}
                     
-                    <div className="absolute bottom-full mb-2 hidden group-hover:block bg-black/80 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap z-40">
-                         {note.interval === 0 ? 'Root' : `Interval: ${note.interval}`}
-                    </div>
+                    {!showAllNotes && (
+                      <div className="absolute bottom-full mb-2 hidden group-hover:block bg-black/80 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap z-40">
+                        {note.interval === 0 ? 'Root' : `Interval: ${note.interval}`}
+                      </div>
+                    )}
                 </div>
             );
         })}

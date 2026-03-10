@@ -1,6 +1,6 @@
-# Fretboard Jedi
+# NeckNinja
 
-Fretboard Jedi is a guitar practice web app for visualizing scales, chord shapes, and triad layouts, with built-in progression helpers and solo scale suggestions.
+NeckNinja is a guitar practice web app for visualizing scales, chord shapes, and triad layouts, with built-in progression helpers and solo scale suggestions.
 
 ## Features
 

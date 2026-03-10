@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Sun, Moon, Info, ChevronDown, ChevronUp, Music, Layers, Triangle, Link2, Play, Pause, Timer } from 'lucide-react';
+import { Sun, Moon, Info, ChevronDown, ChevronUp, Music, Layers, Triangle, Link2, Play, Pause, Timer, HelpCircle } from 'lucide-react';
 import clsx from 'clsx';
 import Fretboard from './components/Fretboard';
+import VerticalScaleFretboard from './components/VerticalScaleFretboard';
 import TabGenerator from './components/TabGenerator';
 import VerticalChordChart from './components/VerticalChordChart';
 import TriadFretboard from './components/TriadFretboard';
+import Tooltip from './components/Tooltip';
+import WelcomeModal from './components/WelcomeModal';
 import { NOTES, SCALES, CHORDS, POSITION_NAMES, POSITION_COLORS } from './constants';
 import { NoteName, ScaleType, ChordType, Position, Settings, Mode, TriadQuality, StringGroup, KeyMode } from './types';
 import { getScaleNotes, getScaleDegreeChords, getProgressionScaleSuggestions } from './utils/musicLogic';
@@ -36,8 +39,6 @@ type ScaleView = 'pattern' | 'allNotes';
 type ChordNoteDisplayMode = 'shape' | 'all';
 type ChordCagedScope = 'core' | 'full';
 
-// Easy rollback: set to false to restore standalone Triads tab behavior.
-const ENABLE_HYBRID_TRIADS = true;
 
 const MAJOR_SCALE_INTERVALS = [0, 2, 4, 5, 7, 9, 11] as const;
 const NATURAL_MINOR_INTERVALS = [0, 2, 3, 5, 7, 8, 10] as const;
@@ -101,8 +102,9 @@ const isChordType = (value: string): value is ChordType => {
 export default function App() {
   // State
   const [mode, setMode] = useState<Mode>('Scale');
-  const [chordView, setChordView] = useState<ChordView>('Chords');
+
   const [scaleView, setScaleView] = useState<ScaleView>('pattern');
+  const [scaleLayout, setScaleLayout] = useState<'horizontal' | 'vertical'>('vertical');
   const [root, setRoot] = useState<NoteName>('A');
   const [scaleType, setScaleType] = useState<ScaleType>(ScaleType.MINOR_PENTATONIC);
   const [selectedChords, setSelectedChords] = useState<SelectedChord[]>([
@@ -115,7 +117,7 @@ export default function App() {
   const [triadQuality, setTriadQuality] = useState<TriadQuality>(TriadQuality.MAJOR);
   const [showIntervalLabels, setShowIntervalLabels] = useState(true);
   const [stringGroup, setStringGroup] = useState<StringGroup>('All');
-  const [position, setPosition] = useState<Position>(1);
+  const [position, setPosition] = useState<Position>('Full Neck');
   const [allNotesZoom, setAllNotesZoom] = useState(1.35);
   const [settings, setSettings] = useState<Settings>({
     showNoteNames: true,
@@ -134,6 +136,14 @@ export default function App() {
   const [practicePlaying, setPracticePlaying] = useState(false);
   const [activePracticeChordIndex, setActivePracticeChordIndex] = useState<number | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(() => {
+    try { return localStorage.getItem('nn_welcomed') !== '1'; } catch { return true; }
+  });
+
+  const closeWelcome = () => {
+    setShowWelcome(false);
+    try { localStorage.setItem('nn_welcomed', '1'); } catch { /* ignore */ }
+  };
 
   const hasLoadedFromUrlRef = React.useRef(false);
   const audioContextRef = React.useRef<AudioContext | null>(null);
@@ -170,10 +180,10 @@ export default function App() {
   }, [mode, scaleView]);
 
   useEffect(() => {
-    if (mode === 'Chord' && chordView === 'Triads') {
+    if (mode === 'Triads') {
       setPracticePlaying(false);
     }
-  }, [mode, chordView]);
+  }, [mode]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -181,11 +191,12 @@ export default function App() {
     const rootParam = params.get('root');
     const scaleParam = params.get('scale');
     const scaleViewParam = params.get('scaleView');
+    const scaleLayoutParam = params.get('scaleLayout');
     const allNotesZoomParam = params.get('allNotesZoom');
     const positionParam = params.get('position');
     const progressionKeyParam = params.get('progressionKey');
     const progressionModeParam = params.get('progressionMode');
-    const chordViewParam = params.get('chordView');
+
     const presetParam = params.get('preset');
     const bpmParam = params.get('bpm');
     const triadParam = params.get('triad');
@@ -195,15 +206,10 @@ export default function App() {
     const chordsParam = params.get('chords');
 
     if (modeParam === 'Scale' || modeParam === 'Chord' || modeParam === 'Triads') {
-      if (ENABLE_HYBRID_TRIADS && modeParam === 'Triads') {
-        setMode('Chord');
-        setChordView('Triads');
-      } else {
-        setMode(modeParam);
-      }
+      setMode(modeParam);
     }
-    if (chordViewParam === 'Chords' || chordViewParam === 'Triads') setChordView(chordViewParam);
     if (scaleViewParam === 'pattern' || scaleViewParam === 'allNotes') setScaleView(scaleViewParam);
+    if (scaleLayoutParam === 'horizontal' || scaleLayoutParam === 'vertical') setScaleLayout(scaleLayoutParam);
     if (isNoteName(rootParam)) setRoot(rootParam);
     if (isScaleType(scaleParam)) setScaleType(scaleParam);
     if (allNotesZoomParam) {
@@ -259,11 +265,11 @@ export default function App() {
     params.set('root', root);
     params.set('scale', scaleType);
     params.set('scaleView', scaleView);
+    params.set('scaleLayout', scaleLayout);
     params.set('allNotesZoom', allNotesZoom.toFixed(2));
     params.set('position', String(position));
     params.set('progressionKey', progressionKey);
     params.set('progressionMode', progressionMode);
-    params.set('chordView', chordView);
     params.set('triad', triadQuality);
     params.set('chordNoteMode', chordNoteDisplayMode);
     params.set('cagedScope', chordCagedScope);
@@ -283,11 +289,11 @@ export default function App() {
     root,
     scaleType,
     scaleView,
+    scaleLayout,
     allNotesZoom,
     position,
     progressionKey,
     progressionMode,
-    chordView,
     triadQuality,
     chordNoteDisplayMode,
     chordCagedScope,
@@ -317,7 +323,7 @@ export default function App() {
     mode === 'Scale'
       ? (scaleView === 'allNotes' ? chromaticDefinition : SCALES[scaleType])
       : mode === 'Chord'
-        ? (chordView === 'Triads' ? triadDefinition : CHORDS[activeChordType])
+        ? CHORDS[activeChordType]
         : triadDefinition;
   const isScaleAllNotesView = mode === 'Scale' && scaleView === 'allNotes';
   const effectiveScalePosition: Position = isScaleAllNotesView ? 'Full Neck' : position;
@@ -377,7 +383,7 @@ export default function App() {
     }
 
     const msPerBeat = Math.max(120, Math.floor(60000 / bpm));
-    const useBarAccent = mode === 'Chord' && chordView === 'Chords';
+    const useBarAccent = mode === 'Chord';
     metronomeTimerRef.current = window.setInterval(() => {
       const accent = useBarAccent && metronomeBeatRef.current % 4 === 0;
       playMetronomeClick(accent);
@@ -388,7 +394,7 @@ export default function App() {
       if (metronomeTimerRef.current) window.clearInterval(metronomeTimerRef.current);
       metronomeTimerRef.current = null;
     };
-  }, [metronomeOn, bpm, mode, chordView]);
+  }, [metronomeOn, bpm, mode]);
 
   useEffect(() => {
     if (!practicePlaying || selectedChords.length === 0) {
@@ -486,14 +492,27 @@ export default function App() {
               className="h-16 w-auto object-contain"
             />
           </div>
-          <button
-            onClick={() => setSettings(prev => ({ ...prev, darkMode: !prev.darkMode }))}
-            className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-600 dark:text-slate-400"
-          >
-            {settings.darkMode ? <Sun size={20} /> : <Moon size={20} />}
-          </button>
+          <div className="flex items-center gap-2">
+            <Tooltip content="How to use NeckNinja" position="bottom">
+              <button
+                onClick={() => setShowWelcome(true)}
+                className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-500 dark:text-slate-400"
+                aria-label="Help"
+              >
+                <HelpCircle size={20} />
+              </button>
+            </Tooltip>
+            <button
+              onClick={() => setSettings(prev => ({ ...prev, darkMode: !prev.darkMode }))}
+              className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-600 dark:text-slate-400"
+            >
+              {settings.darkMode ? <Sun size={20} /> : <Moon size={20} />}
+            </button>
+          </div>
         </div>
       </header>
+
+      {showWelcome && <WelcomeModal onClose={closeWelcome} />}
 
       <main className="flex-1 max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full space-y-6">
         
@@ -502,7 +521,7 @@ export default function App() {
           
           {/* Mode Switcher */}
           <div className="flex justify-center pb-4 border-b border-slate-100 dark:border-slate-700/50">
-             <div className="bg-slate-100 dark:bg-slate-900 p-1 rounded-full flex w-full max-w-lg">
+             <div className="bg-slate-100 dark:bg-slate-900 p-1 rounded-full flex w-full max-w-xl">
                 <button
                    onClick={() => setMode('Scale')}
                    className={clsx(
@@ -525,19 +544,17 @@ export default function App() {
                 >
                    <Layers size={16} /> Chords
                 </button>
-                {!ENABLE_HYBRID_TRIADS && (
-                  <button
-                     onClick={() => setMode('Triads')}
-                     className={clsx(
-                         "flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-full text-sm font-bold transition-all duration-300",
-                         mode === 'Triads'
-                          ? "bg-white dark:bg-slate-700 text-violet-600 dark:text-violet-300 shadow-sm scale-100"
-                          : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-                     )}
-                  >
-                     <Triangle size={16} /> Triads
-                  </button>
-                )}
+                <button
+                   onClick={() => setMode('Triads')}
+                   className={clsx(
+                       "flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-full text-sm font-bold transition-all duration-300",
+                       mode === 'Triads'
+                        ? "bg-white dark:bg-slate-700 text-violet-600 dark:text-violet-300 shadow-sm scale-100"
+                        : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                   )}
+                >
+                   <Triangle size={16} /> Triads
+                </button>
              </div>
           </div>
 
@@ -546,24 +563,6 @@ export default function App() {
             {/* Group 1: Definition Selection */}
             {mode === 'Chord' ? (
               <div className="flex-1 w-full space-y-3">
-                <div className="inline-flex bg-slate-100 dark:bg-slate-900 rounded-md p-0.5 w-fit">
-                  {(['Chords', 'Triads'] as const).map((view) => (
-                    <button
-                      key={view}
-                      onClick={() => setChordView(view)}
-                      className={clsx(
-                        "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
-                        chordView === view
-                          ? "bg-violet-500 text-white"
-                          : "text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
-                      )}
-                    >
-                      {view}
-                    </button>
-                  ))}
-                </div>
-
-                {chordView === 'Chords' ? (
                 <>
                 <div className="flex items-center justify-between">
                   <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -800,53 +799,6 @@ export default function App() {
                   </div>
                 </div>
                 </>
-                ) : (
-                  <div className="bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-lg p-3 space-y-3">
-                    <div className="flex flex-col sm:flex-row gap-3">
-                      <div className="flex-1 min-w-[120px]">
-                        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Root</label>
-                        <div className="relative">
-                          <select
-                            value={root}
-                            onChange={(e) => setRoot(e.target.value as NoteName)}
-                            className="w-full appearance-none bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg py-2 px-3 pr-8 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none text-sm font-medium"
-                          >
-                            {NOTES.map(note => <option key={note} value={note}>{note}</option>)}
-                          </select>
-                          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                        </div>
-                      </div>
-                      <div className="flex-1 min-w-[120px]">
-                        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Quality</label>
-                        <div className="relative">
-                          <select
-                            value={triadQuality}
-                            onChange={(e) => setTriadQuality(e.target.value as TriadQuality)}
-                            className="w-full appearance-none bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg py-2 px-3 pr-8 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none text-sm font-medium"
-                          >
-                            {Object.values(TriadQuality).map(tq => <option key={tq} value={tq}>{tq}</option>)}
-                          </select>
-                          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                        </div>
-                      </div>
-                      <div className="flex-1 min-w-[180px]">
-                        <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">String Group</label>
-                        <div className="relative">
-                          <select
-                            value={stringGroup}
-                            onChange={(e) => setStringGroup(e.target.value as StringGroup)}
-                            className="w-full appearance-none bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg py-2 px-3 pr-8 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none text-sm font-medium"
-                          >
-                            {(['All', '1-2-3', '2-3-4', '3-4-5', '4-5-6'] as StringGroup[]).map(sg => (
-                              <option key={sg} value={sg}>{sg}</option>
-                            ))}
-                          </select>
-                          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             ) : (
               <div className="flex gap-4 flex-1">
@@ -854,45 +806,90 @@ export default function App() {
                   {mode === 'Scale' && (
                     <>
                       <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Available Views</label>
-                      <div className="inline-flex bg-slate-100 dark:bg-slate-900 rounded-md p-0.5 mb-3 w-fit">
-                        <button
-                          onClick={() => setScaleView('pattern')}
-                          className={clsx(
-                            "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
-                            scaleView === 'pattern'
-                              ? "bg-violet-500 text-white"
-                              : "text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
-                          )}
-                        >
-                          Scale Pattern
-                        </button>
-                        <button
-                          onClick={() => setScaleView('allNotes')}
-                          className={clsx(
-                            "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
-                            scaleView === 'allNotes'
-                              ? "bg-violet-500 text-white"
-                              : "text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
-                          )}
-                        >
-                          All Notes
-                        </button>
+                      <div className="flex items-center gap-2 mb-3 flex-wrap">
+                        <div className="inline-flex bg-slate-100 dark:bg-slate-900 rounded-md p-0.5 w-fit">
+                          <button
+                            onClick={() => setScaleView('pattern')}
+                            className={clsx(
+                              "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
+                              scaleView === 'pattern'
+                                ? "bg-violet-500 text-white"
+                                : "text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                            )}
+                          >
+                            Scale Pattern
+                          </button>
+                          <button
+                            onClick={() => setScaleView('allNotes')}
+                            className={clsx(
+                              "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
+                              scaleView === 'allNotes'
+                                ? "bg-violet-500 text-white"
+                                : "text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                            )}
+                          >
+                            All Notes
+                          </button>
+                        </div>
+                        {scaleView === 'allNotes' && (
+                          <Tooltip content="Tip: click a string label (6th, 5th…) on the fretboard to filter notes to just that string. Click again to show all strings." position="bottom">
+                            <span className="inline-flex items-center gap-1 text-xs text-violet-500 cursor-default select-none">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                              Filter by string
+                            </span>
+                          </Tooltip>
+                        )}
+                        {scaleView === 'pattern' && (
+                          <div className="inline-flex bg-slate-100 dark:bg-slate-900 rounded-md p-0.5 w-fit">
+                            <Tooltip content="Horizontal fretboard — great for seeing the full neck at once" position="bottom">
+                              <button
+                                onClick={() => setScaleLayout('horizontal')}
+                                className={clsx(
+                                  "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
+                                  scaleLayout === 'horizontal'
+                                    ? "bg-violet-500 text-white"
+                                    : "text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                                )}
+                              >
+                                Horizontal
+                              </button>
+                            </Tooltip>
+                            <Tooltip content="Vertical fretboard — matches how you see the neck while playing" position="bottom">
+                              <button
+                                onClick={() => setScaleLayout('vertical')}
+                                className={clsx(
+                                  "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
+                                  scaleLayout === 'vertical'
+                                    ? "bg-violet-500 text-white"
+                                    : "text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                                )}
+                              >
+                                Vertical
+                              </button>
+                            </Tooltip>
+                          </div>
+                        )}
                       </div>
                     </>
                   )}
-                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Root</label>
-                  <div className="relative">
-                    <select
-                      value={root}
-                      onChange={(e) => setRoot(e.target.value as NoteName)}
-                      className="w-full appearance-none bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg py-2.5 px-4 pr-8 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none font-medium"
-                    >
-                      {NOTES.map(note => <option key={note} value={note}>{note}</option>)}
-                    </select>
-                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                  </div>
+                  {!isScaleAllNotesView && (
+                    <>
+                      <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Root</label>
+                      <div className="relative">
+                        <select
+                          value={root}
+                          onChange={(e) => setRoot(e.target.value as NoteName)}
+                          className="w-full appearance-none bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg py-2.5 px-4 pr-8 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none font-medium"
+                        >
+                          {NOTES.map(note => <option key={note} value={note}>{note}</option>)}
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                      </div>
+                    </>
+                  )}
                 </div>
 
+                {!isScaleAllNotesView && (
                 <div className="flex-[2]">
                   <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
                       {mode === 'Scale' ? 'Scale Type' : 'Quality'}
@@ -918,6 +915,7 @@ export default function App() {
                     <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                   </div>
                 </div>
+                )}
               </div>
             )}
 
@@ -996,112 +994,120 @@ export default function App() {
 
             {/* Group 3: Toggles */}
             <div className="flex gap-2">
-              <button
-                onClick={() => setSettings(s => ({ ...s, showNoteNames: !s.showNoteNames }))}
-                className={clsx(
-                    "p-2.5 rounded-lg border transition-colors",
-                    settings.showNoteNames ? "bg-violet-100 dark:bg-violet-900/30 border-violet-200 dark:border-violet-700 text-violet-700 dark:text-violet-300" : "bg-transparent border-slate-200 dark:border-slate-700 text-slate-400"
-                )}
-                title="Toggle Note Names"
-              >
-                <span className="font-bold text-xs">Notes</span>
-              </button>
-
-              {mode === 'Scale' && scaleView === 'pattern' && (
+              <Tooltip content="Show or hide note names (A, B, C…) on each dot" position="bottom">
                 <button
-                  onClick={() => setSettings(s => ({ ...s, showConnections: !s.showConnections }))}
+                  onClick={() => setSettings(s => ({ ...s, showNoteNames: !s.showNoteNames }))}
                   className={clsx(
                       "p-2.5 rounded-lg border transition-colors",
-                      settings.showConnections ? "bg-violet-100 dark:bg-violet-900/30 border-violet-200 dark:border-violet-700 text-violet-700 dark:text-violet-300" : "bg-transparent border-slate-200 dark:border-slate-700 text-slate-400"
+                      settings.showNoteNames ? "bg-violet-100 dark:bg-violet-900/30 border-violet-200 dark:border-violet-700 text-violet-700 dark:text-violet-300" : "bg-transparent border-slate-200 dark:border-slate-700 text-slate-400"
                   )}
-                  title="Toggle Position Connections"
                 >
-                  <span className="font-bold text-xs">CONN</span>
+                  <span className="font-bold text-xs">Notes</span>
                 </button>
+              </Tooltip>
+
+              {mode === 'Scale' && scaleView === 'pattern' && (
+                <Tooltip content="Draw lines connecting adjacent scale positions so you can see how they overlap and link across the neck" position="bottom">
+                  <button
+                    onClick={() => setSettings(s => ({ ...s, showConnections: !s.showConnections }))}
+                    className={clsx(
+                        "p-2.5 rounded-lg border transition-colors",
+                        settings.showConnections ? "bg-violet-100 dark:bg-violet-900/30 border-violet-200 dark:border-violet-700 text-violet-700 dark:text-violet-300" : "bg-transparent border-slate-200 dark:border-slate-700 text-slate-400"
+                    )}
+                  >
+                    <span className="font-bold text-xs">CONN</span>
+                  </button>
+                </Tooltip>
               )}
 
               {mode === 'Scale' && scaleView === 'pattern' && (
-                <button
-                  onClick={() => setShowScaleDegreeHelper(prev => !prev)}
-                  className={clsx(
-                      "p-2.5 rounded-lg border transition-colors",
-                      showScaleDegreeHelper ? "bg-violet-100 dark:bg-violet-900/30 border-violet-200 dark:border-violet-700 text-violet-700 dark:text-violet-300" : "bg-transparent border-slate-200 dark:border-slate-700 text-slate-400"
-                  )}
-                  title="Toggle Chords for a Key"
-                >
-                  <span className="font-bold text-xs">KEY</span>
-                </button>
+                <Tooltip content="Show the diatonic chords that naturally fit in this key — useful for knowing what chords to play over a scale" position="bottom">
+                  <button
+                    onClick={() => setShowScaleDegreeHelper(prev => !prev)}
+                    className={clsx(
+                        "p-2.5 rounded-lg border transition-colors",
+                        showScaleDegreeHelper ? "bg-violet-100 dark:bg-violet-900/30 border-violet-200 dark:border-violet-700 text-violet-700 dark:text-violet-300" : "bg-transparent border-slate-200 dark:border-slate-700 text-slate-400"
+                    )}
+                  >
+                    <span className="font-bold text-xs">KEY</span>
+                  </button>
+                </Tooltip>
               )}
 
-              {mode === 'Chord' && chordView === 'Chords' && (
+              {mode === 'Chord' && (
                 <div className="flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
-                  <button
-                    onClick={() => setChordNoteDisplayMode('shape')}
-                    className={clsx(
-                      "px-2.5 py-2 text-[10px] font-bold uppercase tracking-wide transition-colors",
-                      chordNoteDisplayMode === 'shape'
-                        ? "bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300"
-                        : "bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-                    )}
-                    title="Shape-Specific (CAGED)"
-                  >
-                    SHAPE
-                  </button>
-                  <button
-                    onClick={() => setChordNoteDisplayMode('all')}
-                    className={clsx(
-                      "px-2.5 py-2 text-[10px] font-bold uppercase tracking-wide transition-colors border-l border-slate-200 dark:border-slate-700",
-                      chordNoteDisplayMode === 'all'
-                        ? "bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300"
-                        : "bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-                    )}
-                    title="All Chord Tones"
-                  >
-                    ALL TONES
-                  </button>
+                  <Tooltip content="Show only the notes that belong to the specific CAGED chord shape — easier to see the chord voicing clearly" position="bottom">
+                    <button
+                      onClick={() => setChordNoteDisplayMode('shape')}
+                      className={clsx(
+                        "px-2.5 py-2 text-[10px] font-bold uppercase tracking-wide transition-colors",
+                        chordNoteDisplayMode === 'shape'
+                          ? "bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300"
+                          : "bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                      )}
+                    >
+                      SHAPE
+                    </button>
+                  </Tooltip>
+                  <Tooltip content="Show every chord tone across the entire neck, not just one shape" position="bottom">
+                    <button
+                      onClick={() => setChordNoteDisplayMode('all')}
+                      className={clsx(
+                        "px-2.5 py-2 text-[10px] font-bold uppercase tracking-wide transition-colors border-l border-slate-200 dark:border-slate-700",
+                        chordNoteDisplayMode === 'all'
+                          ? "bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300"
+                          : "bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                      )}
+                    >
+                      ALL TONES
+                    </button>
+                  </Tooltip>
                 </div>
               )}
 
-              {mode === 'Chord' && chordView === 'Chords' && (
+              {mode === 'Chord' && (
                 <div className="flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
-                  <button
-                    onClick={() => setChordCagedScope('core')}
-                    className={clsx(
-                      "px-2.5 py-2 text-[10px] font-bold uppercase tracking-wide transition-colors",
-                      chordCagedScope === 'core'
-                        ? "bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300"
-                        : "bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-                    )}
-                    title="Core CAGED (AED only)"
-                  >
-                    CORE CAGED
-                  </button>
-                  <button
-                    onClick={() => setChordCagedScope('full')}
-                    className={clsx(
-                      "px-2.5 py-2 text-[10px] font-bold uppercase tracking-wide transition-colors border-l border-slate-200 dark:border-slate-700",
-                      chordCagedScope === 'full'
-                        ? "bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300"
-                        : "bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-                    )}
-                    title="Full CAGED"
-                  >
-                    FULL CAGED
-                  </button>
+                  <Tooltip content="Show the 3 most common CAGED shapes (A, E, D) — the best starting point for most guitarists" position="bottom">
+                    <button
+                      onClick={() => setChordCagedScope('core')}
+                      className={clsx(
+                        "px-2.5 py-2 text-[10px] font-bold uppercase tracking-wide transition-colors",
+                        chordCagedScope === 'core'
+                          ? "bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300"
+                          : "bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                      )}
+                    >
+                      CORE CAGED
+                    </button>
+                  </Tooltip>
+                  <Tooltip content="Show all 5 CAGED shapes across the full neck" position="bottom">
+                    <button
+                      onClick={() => setChordCagedScope('full')}
+                      className={clsx(
+                        "px-2.5 py-2 text-[10px] font-bold uppercase tracking-wide transition-colors border-l border-slate-200 dark:border-slate-700",
+                        chordCagedScope === 'full'
+                          ? "bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300"
+                          : "bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                      )}
+                    >
+                      FULL CAGED
+                    </button>
+                  </Tooltip>
                 </div>
               )}
 
-              {(mode === 'Triads' || (mode === 'Chord' && chordView === 'Triads')) && (
-                <button
-                  onClick={() => setShowIntervalLabels(prev => !prev)}
-                  className={clsx(
-                      "p-2.5 rounded-lg border transition-colors",
-                      showIntervalLabels ? "bg-violet-100 dark:bg-violet-900/30 border-violet-200 dark:border-violet-700 text-violet-700 dark:text-violet-300" : "bg-transparent border-slate-200 dark:border-slate-700 text-slate-400"
-                  )}
-                  title="Show Interval Labels (R/3/5)"
-                >
-                  <span className="font-bold text-xs">R35</span>
-                </button>
+              {mode === 'Triads' && (
+                <Tooltip content="Label each note by its interval role: R = Root, 3 = Third, 5 = Fifth" position="bottom">
+                  <button
+                    onClick={() => setShowIntervalLabels(prev => !prev)}
+                    className={clsx(
+                        "p-2.5 rounded-lg border transition-colors",
+                        showIntervalLabels ? "bg-violet-100 dark:bg-violet-900/30 border-violet-200 dark:border-violet-700 text-violet-700 dark:text-violet-300" : "bg-transparent border-slate-200 dark:border-slate-700 text-slate-400"
+                    )}
+                  >
+                    <span className="font-bold text-xs">Root, 3rd, 5th</span>
+                  </button>
+                </Tooltip>
               )}
             </div>
 
@@ -1147,7 +1153,7 @@ export default function App() {
         {/* FRETBOARD AREA */}
         <section className="relative">
            {/* Color Legend (Mobile Overlay or Top Strip) - only for Scale and Chord modes */}
-           {!isScaleAllNotesView && mode !== 'Triads' && !(mode === 'Chord' && chordView === 'Triads') && (
+           {!isScaleAllNotesView && mode !== 'Triads' && (
              <div className="flex gap-4 mb-2 overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
                 {[1,2,3,4,5].map(p => (
                     <div key={p} className="flex items-center gap-1.5 min-w-max">
@@ -1159,36 +1165,35 @@ export default function App() {
            )}
 
            {mode === 'Scale' ? (
-             <Fretboard
-                root={root}
-                type={scaleType}
-                mode={mode}
-                position={effectiveScalePosition}
-                settings={settings}
-                showAllNotes={isScaleAllNotesView}
-                allNotesZoom={allNotesZoom}
-                activeStringFilter={allNotesStringFilter}
-                onStringFilterChange={setAllNotesStringFilter}
-                onExportRef={setFretboardRef}
-             />
-           ) : mode === 'Chord' ? (
-             chordView === 'Triads' ? (
-               <TriadFretboard
+             (!isScaleAllNotesView && scaleLayout === 'vertical') ? (
+               <VerticalScaleFretboard
                  root={root}
-                 quality={triadQuality}
-                 showNoteNames={settings.showNoteNames}
-                 showIntervalLabels={showIntervalLabels}
-                 stringGroup={stringGroup}
-               />
-             ) : (
-               <VerticalChordChart
-                 chords={selectedChords}
-                 noteDisplayMode={chordNoteDisplayMode}
-                 cagedScope={chordCagedScope}
-                 activeChordId={activePracticeChordId}
+                 scaleType={scaleType}
+                 position={effectiveScalePosition}
                  settings={settings}
                />
+             ) : (
+               <Fretboard
+                  root={root}
+                  type={scaleType}
+                  mode={mode}
+                  position={effectiveScalePosition}
+                  settings={settings}
+                  showAllNotes={isScaleAllNotesView}
+                  allNotesZoom={allNotesZoom}
+                  activeStringFilter={allNotesStringFilter}
+                  onStringFilterChange={setAllNotesStringFilter}
+                  onExportRef={setFretboardRef}
+               />
              )
+           ) : mode === 'Chord' ? (
+             <VerticalChordChart
+               chords={selectedChords}
+               noteDisplayMode={chordNoteDisplayMode}
+               cagedScope={chordCagedScope}
+               activeChordId={activePracticeChordId}
+               settings={settings}
+             />
            ) : (
              <TriadFretboard
                root={root}
@@ -1212,7 +1217,7 @@ export default function App() {
                  >
                    <h3 className="font-bold text-lg flex items-center gap-2 text-slate-800 dark:text-white">
                       <Info size={20} className="text-violet-500" />
-                      {(mode === 'Chord' && chordView === 'Triads') ? 'Triads' : mode} Info
+                      {mode} Info
                    </h3>
                    {isInfoExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                  </button>
