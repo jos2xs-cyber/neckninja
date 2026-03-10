@@ -15,14 +15,24 @@ export default function Tooltip({ content, children, position = 'bottom' }: Tool
 
   useEffect(() => {
     if (!visible || !triggerRef.current) return;
-    const rect = triggerRef.current.getBoundingClientRect();
-    const GAP = 6;
-    setCoords({
-      top: position === 'bottom'
-        ? rect.bottom + GAP + window.scrollY
-        : rect.top - GAP + window.scrollY,
-      left: rect.left + rect.width / 2 + window.scrollX,
-    });
+    const update = () => {
+      if (!triggerRef.current) return;
+      const rect = triggerRef.current.getBoundingClientRect();
+      const GAP = 6;
+      setCoords({
+        top: position === 'bottom'
+          ? rect.bottom + GAP + window.scrollY
+          : rect.top - GAP + window.scrollY,
+        left: rect.left + rect.width / 2 + window.scrollX,
+      });
+    };
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
   }, [visible, position]);
 
   const child = React.cloneElement(children, {

@@ -133,6 +133,7 @@ export default function App() {
   const [activeProgressionPresetId, setActiveProgressionPresetId] = useState<string | null>(null);
   const [bpm, setBpm] = useState(90);
   const [metronomeOn, setMetronomeOn] = useState(false);
+  const [metronomeBlocked, setMetronomeBlocked] = useState(false);
   const [practicePlaying, setPracticePlaying] = useState(false);
   const [activePracticeChordIndex, setActivePracticeChordIndex] = useState<number | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
@@ -245,7 +246,7 @@ export default function App() {
         const parsed = JSON.parse(chordsParam) as SavedChord[];
         const parsedChords = parsed
           .filter((ch): ch is SavedChord => isNoteName(ch.root) && isChordType(ch.chordType))
-          .slice(0, 4)
+          .slice(0, 5)
           .map((ch, index) => ({ id: index + 1, root: ch.root, chordType: ch.chordType }));
 
         if (parsedChords.length > 0) setSelectedChords(parsedChords);
@@ -352,9 +353,12 @@ export default function App() {
     return audioContextRef.current;
   };
 
-  const playMetronomeClick = (accent: boolean) => {
+  const playMetronomeClick = async (accent: boolean) => {
     try {
       const audioContext = getAudioContext();
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
       const oscillator = audioContext.createOscillator();
       const gainNode = audioContext.createGain();
       const now = audioContext.currentTime;
@@ -369,8 +373,10 @@ export default function App() {
 
       oscillator.start(now);
       oscillator.stop(now + 0.08);
+      setMetronomeBlocked(false);
     } catch {
-      // Audio may be blocked by browser settings until user interaction.
+      setMetronomeBlocked(true);
+      setMetronomeOn(false);
     }
   };
 
@@ -437,7 +443,7 @@ export default function App() {
   const addChordSelection = () => {
     setActiveProgressionPresetId(null);
     setSelectedChords(prev => {
-      if (prev.length >= 4) return prev;
+      if (prev.length >= 5) return prev;
       const nextId = prev.length ? Math.max(...prev.map(ch => ch.id)) + 1 : 1;
       return [...prev, { id: nextId, root: 'A', chordType: ChordType.MAJOR }];
     });
@@ -453,7 +459,7 @@ export default function App() {
     const diatonicQualities =
       progressionMode === 'Major' ? MAJOR_DIATONIC_TRIAD_QUALITIES : MINOR_DIATONIC_TRIAD_QUALITIES;
     const keyIndex = NOTES.indexOf(progressionKey);
-    const nextChords: SelectedChord[] = preset.degrees.slice(0, 4).map((degreeData, index) => {
+    const nextChords: SelectedChord[] = preset.degrees.slice(0, 5).map((degreeData, index) => {
       const scaleInterval = scaleIntervals[degreeData.degree - 1];
       const rootNote = NOTES[(keyIndex + scaleInterval) % 12];
       const defaultChordType = diatonicQualities[degreeData.degree - 1];
@@ -493,7 +499,7 @@ export default function App() {
             />
           </div>
           <div className="flex items-center gap-2">
-            <Tooltip content="How to use NeckNinja" position="bottom">
+            <Tooltip content="Help & Feature Guide" position="bottom">
               <button
                 onClick={() => setShowWelcome(true)}
                 className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-500 dark:text-slate-400"
@@ -564,23 +570,9 @@ export default function App() {
             {mode === 'Chord' ? (
               <div className="flex-1 w-full space-y-3">
                 <>
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    Chords (up to 4)
-                  </label>
-                  <button
-                    onClick={addChordSelection}
-                    disabled={selectedChords.length >= 4}
-                    className={clsx(
-                      "text-xs font-semibold px-3 py-1.5 rounded-md border transition-colors",
-                      selectedChords.length >= 4
-                        ? "border-slate-200 dark:border-slate-700 text-slate-400 cursor-not-allowed"
-                        : "border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20"
-                    )}
-                  >
-                    + Add Chord
-                  </button>
-                </div>
+                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  Chords (up to 5)
+                </label>
 
                 <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-3 items-start">
                   <div className="space-y-3">
@@ -750,6 +742,14 @@ export default function App() {
                           </div>
                         </div>
                       ))}
+                      {selectedChords.length < 5 && (
+                        <button
+                          onClick={addChordSelection}
+                          className="bg-slate-50 dark:bg-slate-900/60 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg p-3 flex items-center justify-center gap-2 text-sm font-semibold text-slate-400 dark:text-slate-500 hover:border-violet-400 hover:text-violet-500 dark:hover:border-violet-500 dark:hover:text-violet-400 transition-colors min-h-[80px]"
+                        >
+                          + Add Chord
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -839,36 +839,34 @@ export default function App() {
                             </span>
                           </Tooltip>
                         )}
-                        {scaleView === 'pattern' && (
-                          <div className="inline-flex bg-slate-100 dark:bg-slate-900 rounded-md p-0.5 w-fit">
-                            <Tooltip content="Horizontal fretboard — great for seeing the full neck at once" position="bottom">
-                              <button
-                                onClick={() => setScaleLayout('horizontal')}
-                                className={clsx(
-                                  "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
-                                  scaleLayout === 'horizontal'
-                                    ? "bg-violet-500 text-white"
-                                    : "text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
-                                )}
-                              >
-                                Horizontal
-                              </button>
-                            </Tooltip>
-                            <Tooltip content="Vertical fretboard — matches how you see the neck while playing" position="bottom">
-                              <button
-                                onClick={() => setScaleLayout('vertical')}
-                                className={clsx(
-                                  "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
-                                  scaleLayout === 'vertical'
-                                    ? "bg-violet-500 text-white"
-                                    : "text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
-                                )}
-                              >
-                                Vertical
-                              </button>
-                            </Tooltip>
-                          </div>
-                        )}
+                        <div className="inline-flex bg-slate-100 dark:bg-slate-900 rounded-md p-0.5 w-fit">
+                          <Tooltip content="Horizontal fretboard — great for seeing the full neck at once" position="bottom">
+                            <button
+                              onClick={() => setScaleLayout('horizontal')}
+                              className={clsx(
+                                "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
+                                scaleLayout === 'horizontal'
+                                  ? "bg-violet-500 text-white"
+                                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                              )}
+                            >
+                              Horizontal
+                            </button>
+                          </Tooltip>
+                          <Tooltip content="Vertical fretboard — matches how you see the neck while playing" position="bottom">
+                            <button
+                              onClick={() => setScaleLayout('vertical')}
+                              className={clsx(
+                                "px-3 py-1.5 text-xs font-semibold rounded transition-colors",
+                                scaleLayout === 'vertical'
+                                  ? "bg-violet-500 text-white"
+                                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                              )}
+                            >
+                              Vertical
+                            </button>
+                          </Tooltip>
+                        </div>
                       </div>
                     </>
                   )}
@@ -970,9 +968,11 @@ export default function App() {
             {/* String Group Selection (only for Triads mode) */}
             {mode === 'Triads' && (
               <div className="flex-1 w-full">
-                 <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                   String Group
-                 </label>
+                 <Tooltip content="Each string group shows the triad voiced across 3 adjacent strings. Start with 1-2-3 (top strings) — it's the easiest to hear and play." position="bottom">
+                   <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2 w-fit cursor-default">
+                     String Group
+                   </label>
+                 </Tooltip>
                  <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-lg overflow-x-auto">
                    {(['All', '1-2-3', '2-3-4', '3-4-5', '4-5-6'] as StringGroup[]).map(sg => (
                      <button
@@ -1134,7 +1134,7 @@ export default function App() {
                 />
                 <span className="text-sm font-bold text-slate-800 dark:text-slate-100 w-10 text-right">{bpm}</span>
                 <button
-                  onClick={() => setMetronomeOn((prev) => !prev)}
+                  onClick={() => { setMetronomeBlocked(false); setMetronomeOn((prev) => !prev); }}
                   className={clsx(
                     "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-semibold transition-colors",
                     metronomeOn
@@ -1145,6 +1145,11 @@ export default function App() {
                   {metronomeOn ? <Pause size={14} /> : <Play size={14} />}
                   {metronomeOn ? 'Stop Metronome' : 'Start Metronome'}
                 </button>
+                {metronomeBlocked && (
+                  <span className="text-xs text-amber-600 dark:text-amber-400">
+                    Audio blocked — tap anywhere on the page first, then try again.
+                  </span>
+                )}
               </div>
             </div>
           )}
@@ -1165,12 +1170,15 @@ export default function App() {
            )}
 
            {mode === 'Scale' ? (
-             (!isScaleAllNotesView && scaleLayout === 'vertical') ? (
+             scaleLayout === 'vertical' ? (
                <VerticalScaleFretboard
                  root={root}
                  scaleType={scaleType}
                  position={effectiveScalePosition}
                  settings={settings}
+                 showAllNotes={isScaleAllNotesView}
+                 activeStringFilter={isScaleAllNotesView ? allNotesStringFilter : undefined}
+                 onStringFilterChange={isScaleAllNotesView ? setAllNotesStringFilter : undefined}
                />
              ) : (
                <Fretboard

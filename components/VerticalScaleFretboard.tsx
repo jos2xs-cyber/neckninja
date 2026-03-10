@@ -4,11 +4,31 @@ import { POSITION_COLORS, POSITION_NAMES } from '../constants';
 import { generateFretboard } from '../utils/musicLogic';
 import clsx from 'clsx';
 
+const NOTE_COLORS: Record<string, string> = {
+  A: '#ef4444',
+  'A#': '#f97316',
+  B: '#eab308',
+  C: '#84cc16',
+  'C#': '#22c55e',
+  D: '#14b8a6',
+  'D#': '#06b6d4',
+  E: '#3b82f6',
+  F: '#6366f1',
+  'F#': '#8b5cf6',
+  G: '#d946ef',
+  'G#': '#ec4899',
+};
+
+const STRING_LABELS = ['6th', '5th', '4th', '3rd', '2nd', '1st'];
+
 interface VerticalScaleFretboardProps {
   root: NoteName;
   scaleType: ScaleType;
   position: Position;
   settings: Settings;
+  showAllNotes?: boolean;
+  activeStringFilter?: number | null;
+  onStringFilterChange?: (idx: number | null) => void;
 }
 
 const VerticalScaleFretboard: React.FC<VerticalScaleFretboardProps> = ({
@@ -16,18 +36,25 @@ const VerticalScaleFretboard: React.FC<VerticalScaleFretboardProps> = ({
   scaleType,
   position,
   settings,
+  showAllNotes = false,
+  activeStringFilter = null,
+  onStringFilterChange,
 }) => {
+  // When showing all notes, force Full Neck so every chromatic note gets opacity=1
+  const effectivePosition: Position = showAllNotes ? 'Full Neck' : position;
+
   const allNotes = useMemo(
-    () => generateFretboard(root, scaleType, position, 'Scale', false),
-    [root, scaleType, position]
+    () => generateFretboard(root, scaleType, effectivePosition, 'Scale', showAllNotes),
+    [root, scaleType, effectivePosition, showAllNotes]
   );
 
   const activeNotes = useMemo(() => allNotes.filter(n => n.opacity >= 0.5), [allNotes]);
 
-  const isFullNeck = position === 'Full Neck';
+  const isFullNeck = effectivePosition === 'Full Neck';
 
   // Determine visible fret window
   const { minFret, maxFret } = useMemo(() => {
+    if (showAllNotes) return { minFret: 0, maxFret: 24 };
     if (isFullNeck) return { minFret: 0, maxFret: 18 };
     const frets = activeNotes.filter(n => n.fret > 0).map(n => n.fret);
     if (frets.length === 0) return { minFret: 0, maxFret: 7 };
@@ -35,21 +62,21 @@ const VerticalScaleFretboard: React.FC<VerticalScaleFretboardProps> = ({
       minFret: Math.max(0, Math.min(...frets) - 1),
       maxFret: Math.min(24, Math.max(...frets) + 1),
     };
-  }, [activeNotes, isFullNeck]);
+  }, [activeNotes, isFullNeck, showAllNotes]);
 
   const fretHeight = 46;
   const stringSpacing = 48;
   const nutHeight = 8;
-  const labelWidth = 92;
+  const labelWidth = showAllNotes ? 0 : 92;
   const fretNumberWidth = 26;
   const leftRailWidth = labelWidth + fretNumberWidth;
   const fretboardWidth = stringSpacing * 5 + 40;
   const fretCount = maxFret - minFret;
   const totalHeight = fretCount * fretHeight + nutHeight;
 
-  // Position labels for full-neck view
+  // Position labels for full-neck scale pattern view (not shown in all-notes mode)
   const positionLabels = useMemo(() => {
-    if (!isFullNeck) return [];
+    if (!isFullNeck || showAllNotes) return [];
     const posMap: Record<number, number[]> = {};
     activeNotes.forEach(n => {
       if (n.fret > 0 && n.positionIndex) {
@@ -63,15 +90,48 @@ const VerticalScaleFretboard: React.FC<VerticalScaleFretboardProps> = ({
       midFret: Math.round(frets.reduce((a, b) => a + b, 0) / frets.length),
       color: POSITION_COLORS[Number(pos) as 1 | 2 | 3 | 4 | 5],
     }));
-  }, [activeNotes, isFullNeck]);
+  }, [activeNotes, isFullNeck, showAllNotes]);
 
-  const visibleNotes = activeNotes.filter(n => n.fret >= minFret && n.fret <= maxFret);
+  const visibleNotes = activeNotes.filter(n =>
+    n.fret >= minFret &&
+    n.fret <= maxFret &&
+    (activeStringFilter == null || n.stringIndex === activeStringFilter)
+  );
 
   const SINGLE_INLAY_FRETS = [3, 5, 7, 9, 15, 17, 19, 21];
   const DOUBLE_INLAY_FRETS = [12, 24];
 
   return (
-    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-4 flex w-fit mx-auto overflow-x-auto">
+    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-4 flex flex-col w-fit mx-auto overflow-x-auto">
+
+      {/* String filter buttons (All Notes mode only) */}
+      {showAllNotes && (
+        <div
+          className="flex mb-2"
+          style={{ paddingLeft: leftRailWidth + fretNumberWidth }}
+        >
+          {STRING_LABELS.map((label, stringIdx) => {
+            const isActive = activeStringFilter === stringIdx;
+            return (
+              <button
+                key={label}
+                type="button"
+                onClick={() => onStringFilterChange?.(isActive ? null : stringIdx)}
+                style={{ width: stringSpacing, marginLeft: stringIdx === 0 ? 20 - stringSpacing / 2 : 0 }}
+                className={clsx(
+                  'text-[10px] font-bold border rounded py-0.5 transition-colors',
+                  isActive
+                    ? 'text-white bg-violet-600 border-violet-600'
+                    : 'text-slate-700 dark:text-slate-200 bg-white/90 dark:bg-slate-900/85 border-slate-300 dark:border-slate-600 hover:bg-violet-50 dark:hover:bg-violet-900/25'
+                )}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <div className="flex">
         {/* Left rail: position labels + fret numbers */}
         <div className="relative" style={{ width: leftRailWidth, height: totalHeight }}>
@@ -133,10 +193,14 @@ const VerticalScaleFretboard: React.FC<VerticalScaleFretboardProps> = ({
           {Array.from({ length: 6 }).map((_, stringIdx) => (
             <div
               key={`string-${stringIdx}`}
-              className="absolute top-0 bottom-0 bg-gradient-to-r from-slate-400 to-slate-500"
+              className={clsx(
+                'absolute top-0 bottom-0 transition-opacity',
+                activeStringFilter !== null && activeStringFilter !== stringIdx ? 'opacity-20' : ''
+              )}
               style={{
                 left: 20 + stringIdx * stringSpacing,
                 width: 1 + (5 - stringIdx) * 0.3,
+                backgroundColor: '#94a3b8',
               }}
             />
           ))}
@@ -180,9 +244,11 @@ const VerticalScaleFretboard: React.FC<VerticalScaleFretboardProps> = ({
               ? nutHeight / 2
               : nutHeight + (note.fret - minFret) * fretHeight - fretHeight / 2;
 
-            const colorKey = isFullNeck ? note.positionIndex : position;
-            const color = POSITION_COLORS[colorKey as 1 | 2 | 3 | 4 | 5] || POSITION_COLORS[1];
-            const isRoot = note.isRoot && !isFullNeck;
+            const color = showAllNotes
+              ? NOTE_COLORS[note.note] ?? '#64748b'
+              : (POSITION_COLORS[isFullNeck ? note.positionIndex as 1|2|3|4|5 : position as 1|2|3|4|5] || POSITION_COLORS[1]);
+
+            const isRoot = note.isRoot && !isFullNeck && !showAllNotes;
             const size = isRoot ? 30 : 24;
             const half = size / 2;
 
@@ -200,6 +266,7 @@ const VerticalScaleFretboard: React.FC<VerticalScaleFretboardProps> = ({
                   top: y - half,
                   backgroundColor: color,
                   fontSize: settings.showNoteNames ? 10 : undefined,
+                  opacity: note.opacity,
                 }}
               >
                 {settings.showNoteNames && note.note}

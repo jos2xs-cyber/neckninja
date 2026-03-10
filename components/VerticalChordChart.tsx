@@ -1,4 +1,5 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { NoteName, ChordType } from '../types';
 import { NOTES, CHORDS, POSITION_COLORS, POSITION_NAMES, STRING_TUNING_INDICES } from '../constants';
 import clsx from 'clsx';
@@ -311,7 +312,7 @@ const FretboardColumn: React.FC<{
     [root, chordType, noteDisplayMode, cagedScope, maxFret]
   );
   const fretHeight = 36;
-  const stringSpacing = totalChords >= 4 ? 42 : totalChords === 3 ? 36 : 32;
+  const stringSpacing = totalChords >= 5 ? 36 : totalChords === 4 ? 42 : totalChords === 3 ? 36 : 32;
   const nutHeight = 8;
   const labelWidth = 98;
   const fretNumberWidth = 26;
@@ -517,23 +518,101 @@ const VerticalChordChart: React.FC<VerticalChordChartProps> = ({
   activeChordId = null,
   settings,
 }) => {
+  const [mobileIndex, setMobileIndex] = useState(0);
+
+  // Keep mobile carousel in sync when practice mode advances the active chord
+  useEffect(() => {
+    if (activeChordId == null) return;
+    const idx = chords.findIndex((c) => c.id === activeChordId);
+    if (idx !== -1) setMobileIndex(idx);
+  }, [activeChordId, chords]);
+
+  // Clamp index if chords list shrinks
+  useEffect(() => {
+    setMobileIndex((prev) => Math.min(prev, Math.max(0, chords.length - 1)));
+  }, [chords.length]);
+
+  const activeChord = chords[mobileIndex];
+
   return (
-    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-4 overflow-x-auto">
-      <div className="flex gap-6 justify-between w-full min-w-max">
-        {chords.map((chord) => (
-          <FretboardColumn
-            key={chord.id}
-            chordId={chord.id}
-            root={chord.root}
-            chordType={chord.chordType}
-            noteDisplayMode={noteDisplayMode}
-            cagedScope={cagedScope}
-            showNoteNames={settings.showNoteNames}
-            totalChords={chords.length}
-            isActive={activeChordId === chord.id}
-          />
-        ))}
+    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-4">
+
+      {/* ── Mobile carousel (hidden md+) ── */}
+      <div className="md:hidden">
+        {chords.length > 0 && activeChord && (
+          <>
+            <FretboardColumn
+              key={activeChord.id}
+              chordId={activeChord.id}
+              root={activeChord.root}
+              chordType={activeChord.chordType}
+              noteDisplayMode={noteDisplayMode}
+              cagedScope={cagedScope}
+              showNoteNames={settings.showNoteNames}
+              totalChords={1}
+              isActive={activeChordId === activeChord.id}
+            />
+
+            {/* Prev / Next + dots */}
+            {chords.length > 1 && (
+              <div className="flex items-center justify-center gap-4 mt-4">
+                <button
+                  onClick={() => setMobileIndex((i) => Math.max(0, i - 1))}
+                  disabled={mobileIndex === 0}
+                  className="p-1.5 rounded-full border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 disabled:opacity-30 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                  aria-label="Previous chord"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+
+                <div className="flex gap-2">
+                  {chords.map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setMobileIndex(i)}
+                      aria-label={`Go to chord ${i + 1}`}
+                      className={`w-2.5 h-2.5 rounded-full transition-colors ${
+                        i === mobileIndex
+                          ? 'bg-violet-500'
+                          : 'bg-slate-300 dark:bg-slate-600 hover:bg-slate-400'
+                      }`}
+                    />
+                  ))}
+                </div>
+
+                <button
+                  onClick={() => setMobileIndex((i) => Math.min(chords.length - 1, i + 1))}
+                  disabled={mobileIndex === chords.length - 1}
+                  className="p-1.5 rounded-full border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 disabled:opacity-30 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                  aria-label="Next chord"
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
+
+      {/* ── Desktop: all chords side by side (hidden below md) ── */}
+      <div className="hidden md:block overflow-x-auto">
+        <div className="flex gap-6 justify-between w-full min-w-max">
+          {chords.map((chord) => (
+            <FretboardColumn
+              key={chord.id}
+              chordId={chord.id}
+              root={chord.root}
+              chordType={chord.chordType}
+              noteDisplayMode={noteDisplayMode}
+              cagedScope={cagedScope}
+              showNoteNames={settings.showNoteNames}
+              totalChords={chords.length}
+              isActive={activeChordId === chord.id}
+            />
+          ))}
+        </div>
+      </div>
+
     </div>
   );
 };

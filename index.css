@@ -10,6 +10,16 @@ body {
   margin: 0;
 }
 
+/* Smooth dark/light mode transition */
+*, *::before, *::after {
+  transition: background-color 200ms ease, border-color 200ms ease, color 200ms ease;
+}
+
+/* Disable transitions on elements that should be instant (animations, transforms) */
+.transition-none, [class*="animate-"] {
+  transition: none !important;
+}
+
 /* Custom scrollbar for tab/suggestions panels */
 .custom-scrollbar::-webkit-scrollbar {
   height: 8px;
