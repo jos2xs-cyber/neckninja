@@ -253,7 +253,7 @@ const VerticalScaleFretboard: React.FC<VerticalScaleFretboardProps> = ({
               : (POSITION_COLORS[isFullNeck ? note.positionIndex as 1|2|3|4|5 : position as 1|2|3|4|5] || POSITION_COLORS[1]);
 
             const isRoot = note.isRoot && !isFullNeck && !showAllNotes;
-            const size = isRoot ? 30 : 24;
+            const size = isRoot ? 36 : 32;
             const half = size / 2;
 
             return (

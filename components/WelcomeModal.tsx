@@ -1,18 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { Music, Layers, Triangle, X, Sparkles, Timer } from 'lucide-react';
+import { Music, Layers, Triangle, X, Sparkles, Timer, User, Coffee } from 'lucide-react';
 import clsx from 'clsx';
 
 interface WelcomeModalProps {
   onClose: () => void;
 }
 
-type Tab = 'overview' | 'scales' | 'chords' | 'practice';
+type Tab = 'overview' | 'scales' | 'chords' | 'practice' | 'about';
 
 const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'overview',  label: 'Overview',  icon: <Sparkles size={13} /> },
   { id: 'scales',    label: 'Scales',    icon: <Music size={13} /> },
   { id: 'chords',    label: 'Chords',    icon: <Layers size={13} /> },
   { id: 'practice',  label: 'Practice',  icon: <Timer size={13} /> },
+  { id: 'about',     label: 'About',     icon: <User size={13} /> },
 ];
 
 function Tip({ children }: { children: React.ReactNode }) {
@@ -166,6 +167,44 @@ function PracticeTab() {
   );
 }
 
+function AboutTab() {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-full bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center shrink-0">
+          <User size={20} className="text-violet-500" />
+        </div>
+        <div>
+          <p className="text-sm font-bold text-slate-900 dark:text-white">James Sanchez</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Creator of NeckNinja</p>
+        </div>
+      </div>
+
+      <div className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed space-y-3">
+        <p>
+          I'm a self-taught guitarist who finally got serious about learning theory and actually knowing my way around the fretboard — so I built NeckNinja.
+        </p>
+        <p>
+          Started it just for myself, then figured there were probably others out there like me: beginner to intermediate players who've burned through more YouTube, TikTok, and Instagram videos than they can count, still trying to connect the dots. That was me.
+        </p>
+        <p>
+          It's free. But if it helps you out, I won't say no to a coffee now and then — keeps me motivated to keep building and playing!
+        </p>
+      </div>
+
+      <a
+        href="https://buymeacoffee.com/jamesbuild"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-[#FFDD00] hover:bg-yellow-300 active:bg-yellow-400 text-slate-900 text-sm font-bold transition-colors"
+      >
+        <Coffee size={16} />
+        Buy me a coffee
+      </a>
+    </div>
+  );
+}
+
 export default function WelcomeModal({ onClose }: WelcomeModalProps) {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
 
@@ -227,6 +266,7 @@ export default function WelcomeModal({ onClose }: WelcomeModalProps) {
           {activeTab === 'scales'    && <ScalesTab />}
           {activeTab === 'chords'    && <ChordsTab />}
           {activeTab === 'practice'  && <PracticeTab />}
+          {activeTab === 'about'     && <AboutTab />}
         </div>
 
         {/* Footer */}

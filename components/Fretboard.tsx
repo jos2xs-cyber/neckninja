@@ -1,5 +1,5 @@
 import React, { useMemo, useRef } from 'react';
-import { FretboardNote, Position, Settings, Mode, ScaleType, ChordType } from '../types';
+import { FretboardNote, Position, Settings, Mode, ScaleType, ChordType, NoteName } from '../types';
 import { POSITION_COLORS } from '../constants';
 import { generateFretboard } from '../utils/musicLogic';
 import clsx from 'clsx';
@@ -15,6 +15,8 @@ interface FretboardProps {
   allNotesZoom?: number;
   activeStringFilter?: number | null;
   onStringFilterChange?: (stringIndex: number | null) => void;
+  activeNoteFilter?: NoteName | null;
+  onNoteFilterChange?: (note: NoteName | null) => void;
   onExportRef?: (ref: React.RefObject<HTMLDivElement>) => void;
 }
 
@@ -52,6 +54,8 @@ const Fretboard: React.FC<FretboardProps> = ({
   allNotesZoom = 1,
   activeStringFilter = null,
   onStringFilterChange,
+  activeNoteFilter = null,
+  onNoteFilterChange,
   onExportRef
 }) => {
   const fretboardRef = useRef<HTMLDivElement>(null);
@@ -235,9 +239,9 @@ const Fretboard: React.FC<FretboardProps> = ({
             const fretCenter = note.fret === 0
                 ? 8 + openFretOffset
                 : getFretPosition(note.fret) - (fretWidths[note.fret-1] / 2) + firstFretOffset;
-            
-            const stringTop = getStringTop(note.stringIndex); 
-            
+
+            const stringTop = getStringTop(note.stringIndex);
+
             const colorKey = position === 'Full Neck' ? note.positionIndex : position;
             const baseColor = showAllNotes
               ? NOTE_COLORS[note.note] ?? '#64748b'
@@ -245,25 +249,31 @@ const Fretboard: React.FC<FretboardProps> = ({
 
             if (note.opacity <= 0) return null;
 
+            const isNoteFiltered = showAllNotes && activeNoteFilter !== null && note.note !== activeNoteFilter;
+            const dotOpacity = isNoteFiltered ? 0.15 : note.opacity;
+            const isActiveFiltered = showAllNotes && activeNoteFilter === note.note;
+
             return (
                 <div
                     key={`note-${idx}`}
+                    onClick={showAllNotes ? () => onNoteFilterChange?.(activeNoteFilter === note.note ? null : note.note) : undefined}
                     className={clsx(
-                        "absolute w-7 h-7 -ml-3.5 -mt-3.5 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-lg transition-all duration-300 cursor-default z-20",
-                        !showAllNotes && "group",
-                        note.isRoot && !showAllNotes && "ring-2 ring-white w-8 h-8 -ml-4 -mt-4 z-30",
-                        note.isRoot && position !== 'Full Neck' && !showAllNotes && "animate-pulse-slow"
+                        "absolute w-8 h-8 -ml-4 -mt-4 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-lg transition-all duration-300 z-20",
+                        showAllNotes ? "cursor-pointer" : "cursor-default group",
+                        note.isRoot && !showAllNotes && "ring-2 ring-white w-9 h-9 -ml-[18px] -mt-[18px] z-30",
+                        note.isRoot && position !== 'Full Neck' && !showAllNotes && "animate-pulse-slow",
+                        isActiveFiltered && "ring-2 ring-white scale-110 z-30"
                     )}
                     style={{
                         left: `${fretCenter}px`,
                         top: `${stringTop}px`,
                         backgroundColor: baseColor,
-                        opacity: note.opacity
+                        opacity: dotOpacity,
                     }}
                 >
                     {settings.showNoteNames && <span>{note.note}</span>}
                     {note.isRoot && !showAllNotes && <div className="absolute inset-0 rounded-full border-2 border-white opacity-50 animate-ping" />}
-                    
+
                     {!showAllNotes && (
                       <div className="absolute bottom-full mb-2 hidden group-hover:block bg-black/80 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap z-40">
                         {note.interval === 0 ? 'Root' : `Interval: ${note.interval}`}
