@@ -14,7 +14,7 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'scales',    label: 'Scales',    icon: <Music size={13} /> },
   { id: 'chords',    label: 'Chords',    icon: <Layers size={13} /> },
   { id: 'practice',  label: 'Practice',  icon: <Timer size={13} /> },
-  { id: 'about',     label: 'About',     icon: <User size={13} /> },
+  { id: 'about',     label: 'About',     icon: <Coffee size={13} /> },
 ];
 
 function Tip({ children }: { children: React.ReactNode }) {
@@ -189,7 +189,7 @@ function AboutTab() {
           Started it just for myself, then figured there were probably others out there like me: beginner to intermediate players who've burned through more YouTube, TikTok, and Instagram videos than they can count, still trying to connect the dots. That was me.
         </p>
         <p>
-          It's free. But if it helps you out, I won't say no to a coffee now and then — keeps me motivated to keep building and playing!
+          It's free. But if it helps you out, I won't say no to a coffee now and then — keeps me motivated to keep building! Keep playing you've got this!
         </p>
       </div>
 

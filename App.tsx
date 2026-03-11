@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Sun, Moon, Info, ChevronDown, ChevronUp, Music, Layers, Triangle, Link2, Play, Pause, Timer, HelpCircle } from 'lucide-react';
+import { Sun, Moon, Info, ChevronDown, ChevronUp, Music, Layers, Triangle, Link2, Play, Pause, Timer, HelpCircle, Coffee } from 'lucide-react';
 import clsx from 'clsx';
 import Fretboard from './components/Fretboard';
 import VerticalScaleFretboard from './components/VerticalScaleFretboard';
@@ -1343,13 +1343,13 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-400 dark:text-slate-500">
           <p>Practice slow, play fast 🎸</p>
           <div className="flex items-center gap-3">
-            <span>Built by <strong className="text-slate-500 dark:text-slate-400">James Build</strong></span>
+            <span>Created by <strong className="text-slate-500 dark:text-slate-400">James Build</strong></span>
             <span className="text-slate-300 dark:text-slate-700">·</span>
             <button
               onClick={() => { setWelcomeInitialTab('about'); setShowWelcome(true); }}
-              className="hover:text-violet-500 transition-colors"
+              className="flex items-center gap-1 hover:text-violet-500 transition-colors"
             >
-              About
+              <Coffee size={12} /> About
             </button>
           </div>
         </div>
