@@ -536,7 +536,7 @@ export default function App() {
       <main className="flex-1 max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full space-y-6">
         
         {/* CONTROL PANEL */}
-        <div className={clsx("bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-4 md:p-6 space-y-6", (mode === 'Scale' || mode === 'Chord') && 'lg:hidden')}>
+        <div className={clsx("bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-4 md:p-6 space-y-6", (mode === 'Scale' || mode === 'Chord' || mode === 'Triads') && 'lg:hidden')}>
           
           <div className="flex flex-col lg:flex-row gap-6 lg:items-end">
             
@@ -1057,7 +1057,7 @@ export default function App() {
         </div>
 
         {/* FRETBOARD AREA */}
-        <section className={clsx("relative", (mode === 'Scale' || mode === 'Chord') && 'lg:hidden')}>
+        <section className={clsx("relative", (mode === 'Scale' || mode === 'Chord' || mode === 'Triads') && 'lg:hidden')}>
            {/* Color Legend (Mobile Overlay or Top Strip) - only for Scale and Chord modes */}
            {!isScaleAllNotesView && mode !== 'Triads' && (
              <div className="flex gap-4 mb-2 overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
@@ -1132,7 +1132,7 @@ export default function App() {
         </section>
 
         {/* BOTTOM SECTION */}
-        <div className={clsx("grid grid-cols-1 lg:grid-cols-2 gap-6 pb-12", (mode === 'Scale' || mode === 'Chord') && 'lg:hidden')}>
+        <div className={clsx("grid grid-cols-1 lg:grid-cols-2 gap-6 pb-12", (mode === 'Scale' || mode === 'Chord' || mode === 'Triads') && 'lg:hidden')}>
             
             {/* Left: Info + Key Chords */}
             <div className="space-y-6">
@@ -1519,6 +1519,115 @@ export default function App() {
               </div>
 
             </div>
+          </div>
+        )}
+
+        {/* ── TRIADS MODE: lg+ sidebar layout ── */}
+        {mode === 'Triads' && (
+          <div className="hidden lg:flex items-start gap-0">
+
+            {/* SIDEBAR */}
+            <aside className="w-64 shrink-0 sticky top-[148px] self-start overflow-y-auto max-h-[calc(100vh-160px)] bg-slate-50 dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 rounded-xl flex flex-col p-4 space-y-5">
+
+              {/* Root */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Root</label>
+                <div className="relative">
+                  <select value={root} onChange={(e) => setRoot(e.target.value as NoteName)} className="w-full appearance-none bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg py-2.5 px-4 pr-8 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none font-medium">
+                    {NOTES.map(note => <option key={note} value={note}>{note}</option>)}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Quality */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Quality</label>
+                <div className="relative">
+                  <select value={triadQuality} onChange={(e) => setTriadQuality(e.target.value as TriadQuality)} className="w-full appearance-none bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 text-slate-900 dark:text-white rounded-lg py-2.5 px-4 pr-8 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none font-medium">
+                    {Object.values(TriadQuality).map(tq => <option key={tq} value={tq}>{tq}</option>)}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* String Group */}
+              <div>
+                <Tooltip content="Each string group shows the triad voiced across 3 adjacent strings. Start with 1-2-3 (top strings) — it's the easiest to hear and play." position="bottom">
+                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2 w-fit cursor-default">
+                    String Group
+                  </label>
+                </Tooltip>
+                <div className="flex flex-wrap gap-1">
+                  {(['All', '1-2-3', '2-3-4', '3-4-5', '4-5-6'] as StringGroup[]).map(sg => (
+                    <button key={sg} onClick={() => setStringGroup(sg)} className={clsx("flex-1 py-1.5 px-2 rounded-md text-xs font-medium transition-all whitespace-nowrap", stringGroup === sg ? "bg-violet-500 text-white shadow-sm" : "bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200")}>
+                      {sg}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Display */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Display</label>
+                <div className="flex gap-2 flex-wrap">
+                  <Tooltip content="Show or hide note names (A, B, C…) on each dot" position="bottom">
+                    <button onClick={() => setSettings(s => ({ ...s, showNoteNames: !s.showNoteNames }))} className={clsx("p-2.5 rounded-lg border transition-colors", settings.showNoteNames ? "bg-violet-100 dark:bg-violet-900/30 border-violet-200 dark:border-violet-700 text-violet-700 dark:text-violet-300" : "bg-transparent border-slate-200 dark:border-slate-700 text-slate-400")}>
+                      <span className="font-bold text-xs">Notes</span>
+                    </button>
+                  </Tooltip>
+                  <Tooltip content="Label each note by its interval role: R = Root, 3 = Third, 5 = Fifth" position="bottom">
+                    <button onClick={() => setShowIntervalLabels(prev => !prev)} className={clsx("p-2.5 rounded-lg border transition-colors", showIntervalLabels ? "bg-violet-100 dark:bg-violet-900/30 border-violet-200 dark:border-violet-700 text-violet-700 dark:text-violet-300" : "bg-transparent border-slate-200 dark:border-slate-700 text-slate-400")}>
+                      <span className="font-bold text-xs">Root, 3rd, 5th</span>
+                    </button>
+                  </Tooltip>
+                </div>
+              </div>
+
+            </aside>
+
+            {/* MAIN AREA */}
+            <div className="flex-1 min-w-0 pl-6">
+              <TriadFretboard
+                root={root}
+                quality={triadQuality}
+                showNoteNames={settings.showNoteNames}
+                showIntervalLabels={showIntervalLabels}
+                stringGroup={stringGroup}
+              />
+
+              {/* Triads Info accordion */}
+              <div className="mt-6 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+                <button onClick={() => setIsInfoExpanded(!isInfoExpanded)} className="w-full flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                  <h3 className="font-bold text-lg flex items-center gap-2 text-slate-800 dark:text-white">
+                    <Info size={20} className="text-violet-500" />
+                    Triads Info
+                  </h3>
+                  {isInfoExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                </button>
+                {isInfoExpanded && (
+                  <div className="p-5 space-y-4">
+                    <div>
+                      <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Intervals</h4>
+                      <div className="flex gap-2 mt-2 flex-wrap">
+                        {triadDefinition.intervals.map((int, i) => (
+                          <span key={i} className="px-2 py-1 bg-slate-100 dark:bg-slate-700 rounded text-sm font-mono text-slate-700 dark:text-slate-300">{int === 0 ? 'R' : int}</span>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Description</h4>
+                      <p className="mt-1 text-slate-700 dark:text-slate-300 leading-relaxed">{triadDefinition.description}</p>
+                    </div>
+                    <div className="bg-violet-50 dark:bg-violet-900/20 border border-violet-100 dark:border-violet-800 p-4 rounded-lg">
+                      <h4 className="text-sm font-bold text-violet-700 dark:text-violet-300 mb-1">Pro Tip 💡</h4>
+                      <p className="text-sm text-violet-600 dark:text-violet-400 italic">{triadDefinition.tip}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
           </div>
         )}
 
